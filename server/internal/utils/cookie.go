@@ -16,12 +16,12 @@ const (
 type CookieConfig struct {
 	Domain   string
 	Secure   bool // Must be true in production (requires HTTPS)
-	SameSite string
+	SameSite http.SameSite
 }
 
 // this writes the refresh token as httponly, secure, samesite = stricct, sent to cookiepath
 func SetRefreshTokenCookie(c *gin.Context, rawToken string, ttl time.Duration, cfg CookieConfig) {
-	sameSite := parseSameSite(cfg.SameSite)
+	sameSite := cfg.SameSite
 	c.SetSameSite(sameSite)
 	c.SetCookie(
 		RefreshTokenCookieName,
@@ -36,7 +36,7 @@ func SetRefreshTokenCookie(c *gin.Context, rawToken string, ttl time.Duration, c
 
 // this clears refresh token cookie immediately it expires looging out the client session
 func ClearRefreshTokenCookie(c *gin.Context, cfg CookieConfig) {
-	sameSite := parseSameSite(cfg.SameSite)
+	sameSite := cfg.SameSite
 	c.SetSameSite(sameSite)
 	c.SetCookie(
 		RefreshTokenCookieName,

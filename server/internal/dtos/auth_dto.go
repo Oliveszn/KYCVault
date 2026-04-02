@@ -6,6 +6,12 @@ type RegisterUserDto struct {
 	// User's email address
 	// @example john.doe@example.com
 	Email string `json:"email" binding:"required" example:"john.doe@example.com"`
+	// User's firstname
+	// @example john
+	FirstName string `json:"firstname" binding:"required" example:"john"`
+	// User's lastname
+	// @example doe
+	LastName string `json:"lastname" binding:"required" example:"doe"`
 	// User's password (min 8 characters)
 	// @example SecureP@ssw0rd
 	Password string `json:"password" binding:"required" example:"SecureP@ssw0rd"`

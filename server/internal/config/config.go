@@ -8,10 +8,13 @@ import (
 )
 
 type Config struct {
-	DB_URI     string
-	ServerPort string
-	JWTSecret  string
-	ENV        string
+	DB_URI            string
+	ServerPort        string
+	JWTSecret         string
+	ENV               string
+	JWT_ACCESS_SECRET string
+	COOKIE_DOMAIN     string
+	JWT_ISSUER        string
 }
 
 func LoadConfig() (Config, error) {
@@ -39,11 +42,29 @@ func LoadConfig() (Config, error) {
 		return Config{}, err
 	}
 
+	jwtaccesssecret, err := extractEnv("JWT_ACCESS_SECRET")
+	if err != nil {
+		return Config{}, err
+	}
+
+	cookiedomain, err := extractEnv("COOKIE_DOMAIN ")
+	if err != nil {
+		return Config{}, err
+	}
+
+	jwtissuer, err := extractEnv("JWT_ISSUER ")
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
-		DB_URI:     Db_uri,
-		ServerPort: port,
-		JWTSecret:  jwtsecret,
-		ENV:        env,
+		DB_URI:            Db_uri,
+		ServerPort:        port,
+		JWTSecret:         jwtsecret,
+		ENV:               env,
+		JWT_ACCESS_SECRET: jwtaccesssecret,
+		COOKIE_DOMAIN:     cookiedomain,
+		JWT_ISSUER:        jwtissuer,
 	}, nil
 
 }

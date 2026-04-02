@@ -5,36 +5,45 @@ import (
 	"fmt"
 	"kycvault/internal/config"
 	"kycvault/internal/database"
+	"kycvault/internal/handlers"
 	"kycvault/internal/logger"
+	"kycvault/internal/middleware"
+	"kycvault/internal/repository"
+	"kycvault/internal/router"
+	"kycvault/internal/services"
+	"kycvault/internal/utils"
 	"net/http"
 	"os"
 	"syscall"
 	"time"
 
-	"github.com/gorilla/mux"
-	"github.com/rs/cors"
+	"github.com/gin-contrib/cors"
 	"go.uber.org/zap"
 
 	"os/signal"
 )
 
 func main() {
+	//CONFIG
 	cfg, err := config.LoadConfig()
 
 	if err != nil {
 		panic("failed to load config")
 	}
 
+	//LOGGER
 	logger.InitLogger(cfg.ENV)
 	// Ensure logger syncs before program exits
 	defer zap.L().Sync()
 
+	//CONNECT DB
 	err = database.InitDatabase(&cfg)
 
 	if err != nil {
 		panic("failed to connect to database")
 	}
 
+	//MIGRATE DB
 	err = database.Migrate()
 
 	if err != nil {
@@ -42,22 +51,51 @@ func main() {
 		panic("failed to migrate database")
 	}
 
-	router := mux.NewRouter()
+	defer database.CloseDB()
 
-	corsMiddleware := cors.New(cors.Options{
-		AllowedOrigins:   []string{"*"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"*"},
-		AllowCredentials: true,
-		MaxAge:           300,
+	jwtUtil, err := utils.NewJWTUtil(utils.JWTConfig{
+		AccessSecret:    cfg.JWT_ACCESS_SECRET,
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 7 * 24 * time.Hour,
+		Issuer:          cfg.JWT_ISSUER,
 	})
+	if err != nil {
+		zap.L().Error("invalid jwt config", zap.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	isProd := cfg.ENV == "production"
+	cookieCfg := utils.CookieConfig{
+		Domain:   cfg.COOKIE_DOMAIN,
+		Secure:   isProd, // Enforce HTTPS in production ✓
+		SameSite: http.SameSiteStrictMode,
+	}
+
+	authRepo := repository.NewAuthRepository(database.GetDB())
+	authSvc := services.NewAuthService(authRepo, jwtUtil, zap.L())
+	authHandler := handlers.NewAuthHandler(authSvc, jwtUtil, cookieCfg, zap.L())
+	authMiddleware := middleware.Authenticate(jwtUtil, zap.L())
+
+	// Router
+	r := router.NewRouter(router.RouterDependencies{
+		AuthHandler:    authHandler,
+		AuthMiddleware: authMiddleware,
+	})
+
+	//CORS
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:5173"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 
 	server := &http.Server{
 		Addr:    ":" + cfg.ServerPort,
-		Handler: corsMiddleware.Handler(router),
+		Handler: r,
 	}
-
-	defer database.CloseDB()
 
 	go func() {
 		if err := server.ListenAndServe(); err != nil {

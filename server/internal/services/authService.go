@@ -70,6 +70,8 @@ func (s *authService) Register(ctx context.Context, dto dtos.RegisterUserDto) (*
 
 	user := &models.User{
 		Email:        dto.Email,
+		FirstName:    dto.FirstName,
+		LastName:     dto.LastName,
 		PasswordHash: string(hash),
 		Role:         "user",
 	}
