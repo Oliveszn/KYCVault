@@ -19,6 +19,12 @@ var DB *gorm.DB
 var AllModels = []interface{}{
 	&models.User{},
 	&models.RefreshToken{},
+	&models.KYCSession{},
+	&models.KYCDocument{},
+	&models.FaceVerification{},
+	&models.WebhookEndpoint{},
+	&models.WebhookDelivery{},
+	&models.AuditEvent{},
 }
 
 func InitDatabase(cfg *config.Config) error {

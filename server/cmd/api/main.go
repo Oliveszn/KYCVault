@@ -75,8 +75,6 @@ func main() {
 	authHandler := handlers.NewAuthHandler(authSvc, jwtUtil, cookieCfg, zap.L())
 	authMiddleware := middleware.Authenticate(jwtUtil, zap.L())
 
-	// r := gin.Default()
-
 	// Router
 	r := router.NewRouter(router.RouterDependencies{
 		AuthHandler:    authHandler,

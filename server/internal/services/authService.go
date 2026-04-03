@@ -173,11 +173,7 @@ func (s *authService) LogoutAll(ctx context.Context, userID uuid.UUID) error {
 }
 
 // this generates a fresh access and refresh token and persists the refresh token hash
-func (s *authService) issueTokenPair(
-	ctx context.Context,
-	user *models.User,
-	ipAddress, userAgent string,
-) (*TokenPair, error) {
+func (s *authService) issueTokenPair(ctx context.Context, user *models.User, ipAddress, userAgent string) (*TokenPair, error) {
 	accessToken, err := s.jwtUtil.GenerateAccessToken(user.ID, user.Role)
 	if err != nil {
 		return nil, fmt.Errorf("service: generate access token: %w", err)
