@@ -8,7 +8,7 @@ import (
 
 // Each token is single use and rotated on every refresh cycle, revoked tokens are reatined for audit purposes and blacklist enforcemnet
 type RefreshToken struct {
-	ID        uuid.UUID `gorm:"primaryKey;column:id"            json:"id"`
+	ID        uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
 	UserID    uuid.UUID `gorm:"column:user_id;not null;index"   json:"user_id"`
 	TokenHash string    `gorm:"column:token_hash;not null;unique" json:"-"` // we store this in SHA-256 hash, we never store raw token
 	ExpiresAt time.Time `gorm:"column:expires_at;not null"      json:"expires_at"`

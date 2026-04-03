@@ -67,14 +67,16 @@ func main() {
 	isProd := cfg.ENV == "production"
 	cookieCfg := utils.CookieConfig{
 		Domain:   cfg.COOKIE_DOMAIN,
-		Secure:   isProd, // Enforce HTTPS in production ✓
-		SameSite: http.SameSiteStrictMode,
+		Secure:   isProd,               // Enforce HTTPS in production ✓
+		SameSite: http.SameSiteLaxMode, //change to strict mode in prod
 	}
 
 	authRepo := repository.NewAuthRepository(database.GetDB())
 	authSvc := services.NewAuthService(authRepo, jwtUtil, zap.L())
 	authHandler := handlers.NewAuthHandler(authSvc, jwtUtil, cookieCfg, zap.L())
 	authMiddleware := middleware.Authenticate(jwtUtil, zap.L())
+
+	// r := gin.Default()
 
 	// Router
 	r := router.NewRouter(router.RouterDependencies{

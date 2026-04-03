@@ -47,12 +47,12 @@ func LoadConfig() (Config, error) {
 		return Config{}, err
 	}
 
-	cookiedomain, err := extractEnv("COOKIE_DOMAIN ")
+	cookiedomain, err := extractEnv("COOKIE_DOMAIN")
 	if err != nil {
 		return Config{}, err
 	}
 
-	jwtissuer, err := extractEnv("JWT_ISSUER ")
+	jwtissuer, err := extractEnv("JWT_ISSUER")
 	if err != nil {
 		return Config{}, err
 	}
@@ -73,7 +73,7 @@ func extractEnv(key string) (string, error) {
 	val := os.Getenv(key)
 
 	if val == "" {
-		return "", fmt.Errorf("missing req env")
+		return "", fmt.Errorf("missing required env: %s", key)
 	}
 
 	return val, nil
