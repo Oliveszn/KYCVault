@@ -19,9 +19,9 @@ export interface AuthResponse {
 
 export interface UserResponse {
   id: number;
-  email: string;
-  firstName: string;
-  lastName: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
   role: string;
 }
 
