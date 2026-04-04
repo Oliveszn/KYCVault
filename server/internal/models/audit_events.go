@@ -85,18 +85,3 @@ type AuditEvent struct {
 func (AuditEvent) TableName() string {
 	return "audit_events"
 }
-
-// Indexes:
-//
-//   -- Timeline for a specific session (most common admin query).
-//   CREATE INDEX idx_audit_events_session_timeline
-//     ON audit_events (session_id, created_at DESC)
-//     WHERE session_id IS NOT NULL;
-//
-//   -- Timeline for a specific user (compliance export).
-//   CREATE INDEX idx_audit_events_user_timeline
-//     ON audit_events (user_id, created_at DESC)
-//     WHERE user_id IS NOT NULL;
-//
-//   -- Event type filtering for dashboards.
-//   CREATE INDEX idx_audit_events_type_time ON audit_events (event_type, created_at DESC);

@@ -59,13 +59,3 @@ type KYCDocument struct {
 func (KYCDocument) TableName() string {
 	return "kyc_documents"
 }
-
-// Indexes:
-//
-//   -- A session can have at most one accepted image per side.
-//   CREATE UNIQUE INDEX idx_kyc_documents_one_accepted_per_side
-//     ON kyc_documents (session_id, side)
-//     WHERE status = 'accepted';
-//
-//   -- Integrity check lookups.
-//   CREATE INDEX idx_kyc_documents_checksum ON kyc_documents (checksum);

@@ -50,6 +50,12 @@ func main() {
 		panic("failed to migrate database")
 	}
 
+	// CREATE INDEXES
+	err = database.CreateIndexes()
+	if err != nil {
+		panic("failed to create indexes")
+	}
+
 	defer database.CloseDB()
 
 	jwtUtil, err := utils.NewJWTUtil(utils.JWTConfig{

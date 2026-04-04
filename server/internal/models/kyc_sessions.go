@@ -33,14 +33,14 @@ const (
 type KYCSession struct {
 	ID      uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
 	UserID  uuid.UUID `gorm:"column:user_id;not null;index"                   json:"user_id"`
-	Status  KYCStatus `gorm:"column:status;not null;default:initiated"        json:"status"`
+	Status  KYCStatus `gorm:"column:status;not null;default:initiated;index"        json:"status"`
 	Country string    `gorm:"column:country;not null"                         json:"country"` // ISO 3166-1 alpha-2, e.g. "NG"
 	IDType  IDType    `gorm:"column:id_type;not null"                         json:"id_type"`
 
 	////Vendor fields populated once the external verification call completes.
-	VendorName      string `gorm:"column:vendor_name"       json:"vendor_name"`       // e.g. "smile_identity", "onfido"
-	VendorSessionID string `gorm:"column:vendor_session_id" json:"vendor_session_id"` // reference ID from vendor
-	VendorRawResult []byte `gorm:"column:vendor_raw_result;type:jsonb" json:"-"`      // full vendor response, stored for audit
+	VendorName      string `gorm:"column:vendor_name"       json:"vendor_name"`             // e.g. "smile_identity", "onfido"
+	VendorSessionID string `gorm:"column:vendor_session_id;index" json:"vendor_session_id"` // reference ID from vendor
+	VendorRawResult []byte `gorm:"column:vendor_raw_result;type:jsonb" json:"-"`            // full vendor response, stored for audit
 
 	// Review fields populated by an admin when status moves to approved/rejected.
 	ReviewerID *uuid.UUID `gorm:"column:reviewer_id;index"  json:"reviewer_id,omitempty"`
@@ -65,17 +65,3 @@ type KYCSession struct {
 func (KYCSession) TableName() string {
 	return "kyc_sessions"
 }
-
-// Indexes to add via AutoMigrate or raw SQL:
-//
-//   -- Only one active (non-terminal) session per user at a time.
-//   CREATE UNIQUE INDEX idx_kyc_sessions_one_active_per_user
-//     ON kyc_sessions (user_id)
-//     WHERE status NOT IN ('approved', 'rejected');
-//
-//   -- Fast lookups by vendor reference (for webhook callbacks from vendor).
-//   CREATE INDEX idx_kyc_sessions_vendor_session_id ON kyc_sessions (vendor_session_id)
-//     WHERE vendor_session_id IS NOT NULL;
-//
-//   -- Status filtering for admin dashboard queue.
-//   CREATE INDEX idx_kyc_sessions_status ON kyc_sessions (status);

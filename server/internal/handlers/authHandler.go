@@ -226,21 +226,6 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	})
 }
 
-// ── Response helpers ──────────────────────────────────────────────────────────
-
-func respond(c *gin.Context, status int, message string, payload interface{}) {
-	c.JSON(status, dtos.StructuredResponse{
-		Success: status < 400,
-		Status:  status,
-		Message: message,
-		Payload: payload,
-	})
-}
-
-func respondError(c *gin.Context, status int, message string) {
-	respond(c, status, message, nil)
-}
-
 // bindJSON attempts to bind and validate the request body. On failure it
 // writes the error response and returns false so the caller can return early.
 func (h *AuthHandler) bindJSON(c *gin.Context, dst interface{}) bool {
