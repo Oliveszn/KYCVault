@@ -81,9 +81,16 @@ func main() {
 	authHandler := handlers.NewAuthHandler(authSvc, jwtUtil, cookieCfg, zap.L())
 	authMiddleware := middleware.Authenticate(jwtUtil, zap.L())
 
+	auditRepo := repository.NewAuditRepository(database.GetDB())
+	auditSvc := services.NewAuditService(auditRepo, zap.L())
+	kycRepo := repository.NewKYCRepository(database.GetDB())
+	kycSvc := services.NewKYCService(kycRepo, auditSvc, zap.L())
+	kycHandler := handlers.NewKYCHandler(kycSvc, zap.L())
+
 	// Router
 	r := router.NewRouter(router.RouterDependencies{
 		AuthHandler:    authHandler,
+		KycHandler:     kycHandler,
 		AuthMiddleware: authMiddleware,
 	})
 

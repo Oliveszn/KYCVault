@@ -45,7 +45,7 @@ func NewAuthRepository(db *gorm.DB) AuthRepository {
 func (r *authRepository) CreateUser(ctx context.Context, user *models.User) error {
 	result := r.db.WithContext(ctx).Create(user)
 	if result.Error != nil {
-		if isDuplicateKeyError(result.Error) {
+		if IsDuplicateKeyError(result.Error) {
 			return ErrUserAlreadyExists
 		}
 		return fmt.Errorf("repository: create user: %w", result.Error)
@@ -148,29 +148,4 @@ func (r *authRepository) DeleteExpiredTokens(ctx context.Context) (int64, error)
 	}
 	// Returns the number of rows deleted.
 	return result.RowsAffected, nil
-}
-
-// detects unique constraint violations.
-func isDuplicateKeyError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-
-	return contains(msg, "duplicate key") ||
-		contains(msg, "UNIQUE constraint failed") ||
-		contains(msg, "Duplicate entry")
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && stringContains(s, substr))
-}
-
-func stringContains(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }
