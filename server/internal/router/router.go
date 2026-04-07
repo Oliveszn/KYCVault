@@ -11,6 +11,7 @@ import (
 type RouterDependencies struct {
 	AuthHandler    *handlers.AuthHandler
 	KycHandler     *handlers.KYCHandler
+	DocHandler     *handlers.DocumentHandler
 	AuthMiddleware gin.HandlerFunc
 }
 
@@ -34,5 +35,7 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 	RegisterRoutes(authGroup, deps.AuthHandler, deps.AuthMiddleware)
 
 	KycRoutes(api, deps.KycHandler, deps.AuthMiddleware)
+
+	docRoutes(api, deps.DocHandler, deps.AuthMiddleware)
 	return r
 }

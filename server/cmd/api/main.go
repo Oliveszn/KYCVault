@@ -6,6 +6,7 @@ import (
 	"kycvault/internal/config"
 	"kycvault/internal/database"
 	"kycvault/internal/handlers"
+	"kycvault/internal/infra/storage"
 	"kycvault/internal/logger"
 	"kycvault/internal/middleware"
 	"kycvault/internal/repository"
@@ -17,6 +18,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"go.uber.org/zap"
 
 	"os/signal"
@@ -87,10 +91,28 @@ func main() {
 	kycSvc := services.NewKYCService(kycRepo, auditSvc, zap.L())
 	kycHandler := handlers.NewKYCHandler(kycSvc, zap.L())
 
+	awsCfg := aws.Config{
+		Region:      cfg.AWSRegion,
+		Credentials: credentials.NewStaticCredentialsProvider(cfg.AWS_ACCESS_KEY, cfg.AWS_SECRET_ACCESS_KEY, ""),
+	}
+
+	// storageClient := s3.NewFromConfig(awsCfg)
+	awsClient := s3.NewFromConfig(awsCfg)
+	storageClient := storage.NewS3Client(awsClient, cfg.S3Bucket)
+
+	docRepo := repository.NewDocumentRepository(database.GetDB())
+	docSvc := services.NewDocumentService(
+		docRepo, kycRepo, kycSvc,
+		storageClient, cfg.S3Bucket,
+		auditSvc, zap.L(),
+	)
+	docHandler := handlers.NewDocumentHandler(docSvc, zap.L())
+
 	// Router
 	r := router.NewRouter(router.RouterDependencies{
 		AuthHandler:    authHandler,
 		KycHandler:     kycHandler,
+		DocHandler:     docHandler,
 		AuthMiddleware: authMiddleware,
 	})
 

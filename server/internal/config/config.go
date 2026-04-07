@@ -8,13 +8,17 @@ import (
 )
 
 type Config struct {
-	DB_URI            string
-	ServerPort        string
-	JWTSecret         string
-	ENV               string
-	JWT_ACCESS_SECRET string
-	COOKIE_DOMAIN     string
-	JWT_ISSUER        string
+	DB_URI                string
+	ServerPort            string
+	JWTSecret             string
+	ENV                   string
+	JWT_ACCESS_SECRET     string
+	COOKIE_DOMAIN         string
+	JWT_ISSUER            string
+	AWS_ACCESS_KEY        string
+	AWS_SECRET_ACCESS_KEY string
+	AWSRegion             string
+	S3Bucket              string
 }
 
 func LoadConfig() (Config, error) {
@@ -57,14 +61,37 @@ func LoadConfig() (Config, error) {
 		return Config{}, err
 	}
 
+	accesskey, err := extractEnv("AWS_ACCESS_KEY_ID")
+	if err != nil {
+		return Config{}, err
+	}
+
+	secretaccesskey, err := extractEnv("AWS_SECRET_ACCESS_KEY")
+	if err != nil {
+		return Config{}, err
+	}
+
+	awsRegion, err := extractEnv("AWS_REGION")
+	if err != nil {
+		return Config{}, err
+	}
+	s3Bucket, err := extractEnv("S3_BUCKET")
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
-		DB_URI:            Db_uri,
-		ServerPort:        port,
-		JWTSecret:         jwtsecret,
-		ENV:               env,
-		JWT_ACCESS_SECRET: jwtaccesssecret,
-		COOKIE_DOMAIN:     cookiedomain,
-		JWT_ISSUER:        jwtissuer,
+		DB_URI:                Db_uri,
+		ServerPort:            port,
+		JWTSecret:             jwtsecret,
+		ENV:                   env,
+		JWT_ACCESS_SECRET:     jwtaccesssecret,
+		COOKIE_DOMAIN:         cookiedomain,
+		JWT_ISSUER:            jwtissuer,
+		AWS_ACCESS_KEY:        accesskey,
+		AWS_SECRET_ACCESS_KEY: secretaccesskey,
+		AWSRegion:             awsRegion,
+		S3Bucket:              s3Bucket,
 	}, nil
 
 }

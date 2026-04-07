@@ -24,6 +24,7 @@ type KYCRepository interface {
 	GetActiveSessionByUserID(ctx context.Context, userID uuid.UUID) (*models.KYCSession, error)
 	GetSessionsByUserID(ctx context.Context, userID uuid.UUID) ([]models.KYCSession, error)
 	UpdateSessionStatus(ctx context.Context, id uuid.UUID, status models.KYCStatus, fields map[string]any) error
+	AdvanceStatusIfCurrent(ctx context.Context, id uuid.UUID, from models.KYCStatus, to models.KYCStatus) (bool, error)
 
 	// Admin queries
 	GetSessionsByStatus(ctx context.Context, status models.KYCStatus, limit, offset int) ([]models.KYCSession, int64, error)
@@ -120,6 +121,25 @@ func (r *kycRepository) UpdateSessionStatus(ctx context.Context, id uuid.UUID, s
 		return ErrSessionNotFound
 	}
 	return nil
+}
+
+// Advancestatus if current is a way to to update the current status of the session
+// I previously handled this in the doc-service (in-memory) which led to race conditions
+func (r *kycRepository) AdvanceStatusIfCurrent(ctx context.Context, id uuid.UUID, from models.KYCStatus, to models.KYCStatus) (bool, error) {
+
+	result := r.db.WithContext(ctx).
+		Model(&models.KYCSession{}).
+		Where("id = ? AND status = ?", id, from).
+		Updates(map[string]any{
+			"status":     to,
+			"updated_at": time.Now().UTC(),
+		})
+
+	if result.Error != nil {
+		return false, result.Error
+	}
+
+	return result.RowsAffected > 0, nil
 }
 
 // GetSessionsByStatus returns a paginated list of sessions in a given status. like IN_REVIEW sessions
