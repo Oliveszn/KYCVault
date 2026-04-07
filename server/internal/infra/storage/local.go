@@ -35,7 +35,7 @@ func (l *LocalClient) Put(ctx context.Context, bucket, key string, body io.Reade
 }
 
 func (l *LocalClient) GetPresignedURL(ctx context.Context, bucket, key string, ttl time.Duration) (string, error) {
-	// No real signing locally — just return a static URL
+	// No real signing locally just return a static URL
 	url := fmt.Sprintf("http://localhost:8000/files/%s/%s", bucket, key)
 	return url, nil
 }

@@ -6,8 +6,6 @@ import (
 	"io"
 	"time"
 
-	// "time"
-
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
@@ -24,18 +22,6 @@ func NewS3Client(client *s3.Client, bucket string) *S3Client {
 	}
 }
 
-//	func (s *S3Client) Put(ctx context.Context, bucket, key string, body io.Reader, size int64, contentType string) error {
-//		_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
-//			Bucket:        &bucket,
-//			Key:           &key,
-//			Body:          body,
-//			ContentType:   &contentType,
-//			ContentLength: &size,
-//		})
-//		return err
-//	}
-//
-// Upload implements storage.Client
 func (s *S3Client) Put(ctx context.Context, bucket, key string, body io.Reader, size int64, contentType string) error {
 	uploader := manager.NewUploader(s.client)
 	_, err := uploader.Upload(ctx, &s3.PutObjectInput{
@@ -54,19 +40,6 @@ func (s *S3Client) GetPresignedURL(ctx context.Context, bucket, key string, ttl 
 	return url, nil
 }
 
-// func (s *S3Client) GetPresignedURL(ctx context.Context, bucket, key string, ttl time.Duration) string {
-// 	url := fmt.Sprintf("https://%s.s3.amazonaws.com/%s", bucket, key)
-// 	return url, nil
-// }
-
-//	func (s *S3Client) Delete(ctx context.Context, bucket, key string) error {
-//		_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
-//			Bucket: &bucket,
-//			Key:    &key,
-//		})
-//		return err
-//	}
-//
 // Delete implements storage.Client
 func (s *S3Client) Delete(ctx context.Context, bucket string, key string) error {
 	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
