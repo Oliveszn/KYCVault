@@ -6,6 +6,7 @@ import (
 	"kycvault/internal/config"
 	"kycvault/internal/database"
 	"kycvault/internal/handlers"
+	"kycvault/internal/infra/facepp"
 	"kycvault/internal/infra/storage"
 	"kycvault/internal/logger"
 	"kycvault/internal/middleware"
@@ -96,7 +97,6 @@ func main() {
 		Credentials: credentials.NewStaticCredentialsProvider(cfg.AWS_ACCESS_KEY, cfg.AWS_SECRET_ACCESS_KEY, ""),
 	}
 
-	// storageClient := s3.NewFromConfig(awsCfg)
 	awsClient := s3.NewFromConfig(awsCfg)
 	storageClient := storage.NewS3Client(awsClient, cfg.S3Bucket)
 
@@ -108,11 +108,29 @@ func main() {
 	)
 	docHandler := handlers.NewDocumentHandler(docSvc, zap.L())
 
+	faceppClient := facepp.NewClient(
+		cfg.FACE_API_KEY,
+		cfg.FACE_API_SECRET,
+	)
+	faceRepo := repository.NewFaceRepository(database.GetDB())
+	faceSvc := services.NewFaceService(
+		faceRepo,
+		docRepo,
+		kycSvc,
+		faceppClient,
+		storageClient,
+		cfg.S3Bucket,
+		auditSvc,
+		zap.L(),
+	)
+	faceHandler := handlers.NewFaceHandler(faceSvc, zap.L())
+
 	// Router
 	r := router.NewRouter(router.RouterDependencies{
 		AuthHandler:    authHandler,
 		KycHandler:     kycHandler,
 		DocHandler:     docHandler,
+		FaceHandler:    faceHandler,
 		AuthMiddleware: authMiddleware,
 	})
 

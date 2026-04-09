@@ -12,6 +12,7 @@ type RouterDependencies struct {
 	AuthHandler    *handlers.AuthHandler
 	KycHandler     *handlers.KYCHandler
 	DocHandler     *handlers.DocumentHandler
+	FaceHandler    *handlers.FaceHandler
 	AuthMiddleware gin.HandlerFunc
 }
 
@@ -37,5 +38,7 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 	KycRoutes(api, deps.KycHandler, deps.AuthMiddleware)
 
 	docRoutes(api, deps.DocHandler, deps.AuthMiddleware)
+
+	FaceRoutes(api, *deps.FaceHandler, deps.AuthMiddleware)
 	return r
 }
