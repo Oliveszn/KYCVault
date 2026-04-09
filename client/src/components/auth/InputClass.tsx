@@ -3,12 +3,12 @@ import { AlertCircle } from "lucide-react";
 
 export const inputClass = (hasError: boolean) =>
   cn(
-    "w-full px-4 py-3 rounded-lg text-sm text-white placeholder-[#383838]",
-    "bg-[#111] border transition-all duration-150 outline-none",
+    "w-full px-4 py-3 rounded-lg text-sm text-gray-900 placeholder-gray-400",
+    "bg-white border transition-all duration-150 outline-none",
     "focus:ring-2 focus:ring-offset-0",
     hasError
       ? "border-red-500/50 focus:border-red-500 focus:ring-red-500/20"
-      : "border-[#222] focus:border-[#c8f557] focus:ring-[#c8f557]/15",
+      : "border-gray-300 focus:border-blue-500 focus:ring-[#c8f557]/30",
   );
 
 export function Field({
@@ -22,7 +22,7 @@ export function Field({
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="block text-xs font-medium text-[#888] tracking-wide uppercase">
+      <label className="block text-xs font-medium text-gray-700 tracking-wide uppercase">
         {label}
       </label>
       {children}
