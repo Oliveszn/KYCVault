@@ -19,6 +19,8 @@ type Config struct {
 	AWS_SECRET_ACCESS_KEY string
 	AWSRegion             string
 	S3Bucket              string
+	FACE_API_KEY          string
+	FACE_API_SECRET       string
 }
 
 func LoadConfig() (Config, error) {
@@ -79,6 +81,15 @@ func LoadConfig() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	faceapikey, err := extractEnv("FACE_API_KEY")
+	if err != nil {
+		return Config{}, err
+	}
+
+	faceapisecret, err := extractEnv("FACE_API_SECRET")
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		DB_URI:                Db_uri,
@@ -92,6 +103,8 @@ func LoadConfig() (Config, error) {
 		AWS_SECRET_ACCESS_KEY: secretaccesskey,
 		AWSRegion:             awsRegion,
 		S3Bucket:              s3Bucket,
+		FACE_API_KEY:          faceapikey,
+		FACE_API_SECRET:       faceapisecret,
 	}, nil
 
 }
