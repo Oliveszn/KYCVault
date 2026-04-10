@@ -27,7 +27,7 @@ export interface UserResponse {
 
 export interface AuthState {
   accessToken: string | null;
-  expiresAt: number | null; // Unix ms timestamp
+  expiresAt: number | null;
   user: UserResponse | null;
   isAuthenticated: boolean;
 }
