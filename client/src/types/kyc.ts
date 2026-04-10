@@ -1,6 +1,18 @@
+type KYCStatus =
+  | "initiated"
+  | "doc_upload"
+  | "face_verify"
+  | "in_review"
+  | "approved"
+  | "rejected";
+type IDType =
+  | "national_id"
+  | "drivers_license"
+  | "passport"
+  | "residence_permit";
 export interface InitiateSessionPayload {
   country: string;
-  IDType: string;
+  IDType: IDType;
 }
 
 export interface ApiResponse<T> {
@@ -11,9 +23,9 @@ export interface ApiResponse<T> {
 export interface KYCSessionResponse {
   id: string;
   userId: string;
-  status: string;
+  status: KYCStatus;
   country: string;
-  idType: string;
+  idType: IDType;
   attemptNumber: number;
   expiresAt: string;
 }

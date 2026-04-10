@@ -1,9 +1,11 @@
+type side = "front" | "back";
+type status = "pending" | "accepted" | "rejected";
 export interface KYCDocument {
   id: string;
   sessionId: string;
   userId: string;
-  side: "front" | "back";
-  status: "pending" | "accepted" | "rejected";
+  side: side;
+  status: status;
   storageKey: string;
   storageBucket: string;
   originalFilename: string;

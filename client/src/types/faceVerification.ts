@@ -1,9 +1,10 @@
+type status = "pending" | "passed" | "failed";
 export interface FaceVerification {
   id: string;
   sessionId: string;
   userId: string;
 
-  status: "pending" | "passed" | "failed";
+  status: status;
 
   attemptCount: number;
 
