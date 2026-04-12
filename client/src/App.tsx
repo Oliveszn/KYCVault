@@ -10,6 +10,10 @@ import {
 import LoginPage from "./pages/auth/LoginPage";
 import RegisterPage from "./pages/auth/RegisterPage";
 import DashboardPage from "./pages/dashboard/DashboardPage";
+import KycForm from "./pages/KYCWizard/KycForm";
+import InitiateSession from "./components/KycForm/Step1";
+import UploadDocument from "./components/KycForm/Step2";
+import FaceVerification from "./components/KycForm/Step3";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,6 +41,15 @@ export default function App() {
               <Route element={<PublicOnlyRoute />}>
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
+                {/* <Route path="/verify" element={<KycForm />} /> */}
+                <Route path="/verify" element={<KycForm />}>
+                  <Route
+                    path="initiate-session"
+                    element={<InitiateSession />}
+                  />
+                  <Route path="upload-docs" element={<UploadDocument />} />
+                  <Route path="face-verify" element={<FaceVerification />} />
+                </Route>
               </Route>
 
               {/* Protected routes redirect to /login if not authed */}
