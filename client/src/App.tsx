@@ -41,8 +41,11 @@ export default function App() {
               <Route element={<PublicOnlyRoute />}>
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
-                {/* <Route path="/verify" element={<KycForm />} /> */}
                 <Route path="/verify" element={<KycForm />}>
+                  <Route
+                    index
+                    element={<Navigate to="initiate-session" replace />}
+                  />
                   <Route
                     path="initiate-session"
                     element={<InitiateSession />}

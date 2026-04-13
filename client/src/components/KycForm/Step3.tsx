@@ -1,14 +1,31 @@
 import { useState, useRef, useEffect } from "react";
-import { Sun, Eye, Camera, X, CheckCircle, Loader2 } from "lucide-react";
+import { Camera, X, CheckCircle, Loader2 } from "lucide-react";
+import { useForm } from "react-hook-form";
+import {
+  faceVerificationSchema,
+  FaceVerificationValues,
+} from "@/utils/validation/kycSchema";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { tips } from "@/config/tips";
+import { useAppSelector } from "@/store/hooks";
 
 type Stage = "instructions" | "camera" | "preview" | "processing" | "done";
 
 export default function FaceVerification() {
+  const formData = useAppSelector((state) => state.createKyc.formData);
+
   const [stage, setStage] = useState<Stage>("instructions");
-  const [selfie, setSelfie] = useState<string | null>(null);
+  const [selfiePreview, setSelfiePreview] = useState<string | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const {
+    setValue,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<FaceVerificationValues>({
+    resolver: zodResolver(faceVerificationSchema),
+  });
 
   const startCamera = async () => {
     setCameraError(null);
@@ -42,52 +59,35 @@ export default function FaceVerification() {
     canvas.width = videoRef.current.videoWidth;
     canvas.height = videoRef.current.videoHeight;
     canvas.getContext("2d")?.drawImage(videoRef.current, 0, 0);
-    const dataUrl = canvas.toDataURL("image/jpeg");
-    setSelfie(dataUrl);
-    stopCamera();
-    setStage("preview");
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const file = new File([blob], "selfie.jpg", { type: "image/jpeg" });
+      setValue("selfie", file, { shouldValidate: true });
+      setSelfiePreview(URL.createObjectURL(blob));
+      stopCamera();
+      setStage("preview");
+    }, "image/jpeg");
   };
 
   const retake = () => {
-    setSelfie(null);
+    setSelfiePreview(null);
     startCamera();
   };
 
-  const processVerification = () => {
+  const onSubmit = (values: FaceVerificationValues) => {
+    const completeData = {
+      ...formData,
+      selfie: values.selfie,
+    };
+    console.log("KYC submission:", completeData);
     setStage("processing");
-    // TODO: submit selfie to backend
-    setTimeout(() => setStage("done"), 3000); // simulated
+    console.log("selfie file ready:", values.selfie);
+    setTimeout(() => setStage("done"), 3000);
   };
 
   useEffect(() => {
     return () => stopCamera();
   }, []);
-
-  const tips = [
-    {
-      icon: <Sun className="w-4 h-4" />,
-      text: "Find an area with good lighting",
-    },
-    {
-      icon: <Eye className="w-4 h-4" />,
-      text: "Remove anything that covers your face",
-    },
-    {
-      icon: (
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          className="w-4 h-4"
-        >
-          <circle cx="12" cy="12" r="10" />
-          <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
-        </svg>
-      ),
-      text: "No glasses, they cause glare and reflections",
-    },
-  ];
 
   return (
     <div className="py-8 px-6 max-w-lg">
@@ -186,7 +186,7 @@ export default function FaceVerification() {
       )}
 
       {/* Preview */}
-      {stage === "preview" && selfie && (
+      {stage === "preview" && selfiePreview && (
         <>
           <div className="mb-6">
             <h1 className="text-xl font-semibold text-foreground tracking-tight">
@@ -199,12 +199,16 @@ export default function FaceVerification() {
 
           <div className="relative rounded-xl overflow-hidden mb-6 aspect-[3/4] bg-black">
             <img
-              src={selfie}
+              src={selfiePreview}
               alt="selfie preview"
               className="w-full h-full object-cover scale-x-[-1]"
             />
           </div>
-
+          {errors.selfie && (
+            <p className="text-xs text-destructive mb-4">
+              {errors.selfie.message}
+            </p>
+          )}
           <div className="flex gap-3">
             <button
               type="button"
@@ -215,7 +219,7 @@ export default function FaceVerification() {
             </button>
             <button
               type="button"
-              onClick={processVerification}
+              onClick={handleSubmit(onSubmit)}
               className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
             >
               <CheckCircle className="w-4 h-4" />
