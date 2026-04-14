@@ -33,7 +33,7 @@ type TokenPair struct {
 }
 
 type AuthService interface {
-	Register(ctx context.Context, dto dtos.RegisterUserDto) (*models.User, error)
+	Register(ctx context.Context, dto dtos.RegisterUserDto, ipAddress, userAgent string) (*TokenPair, error)
 	Login(ctx context.Context, dto dtos.LoginUserDto, ipAddress, userAgent string) (*TokenPair, error)
 	RefreshTokens(ctx context.Context, rawRefreshToken, ipAddress, userAgent string) (*TokenPair, error)
 	Logout(ctx context.Context, rawRefreshToken string) error
@@ -58,7 +58,7 @@ func NewAuthService(
 	}
 }
 
-func (s *authService) Register(ctx context.Context, dto dtos.RegisterUserDto) (*models.User, error) {
+func (s *authService) Register(ctx context.Context, dto dtos.RegisterUserDto, ipAddress, userAgent string) (*TokenPair, error) {
 	if dto.Password != dto.ConfirmPassword {
 		return nil, ErrPasswordMismatch
 	}
@@ -87,18 +87,16 @@ func (s *authService) Register(ctx context.Context, dto dtos.RegisterUserDto) (*
 	}
 
 	s.logger.Info("User registered successfully", zap.String("email", user.Email))
-	return user, nil
+	return s.issueTokenPair(ctx, user, ipAddress, userAgent)
 }
 
 func (s *authService) Login(ctx context.Context, dto dtos.LoginUserDto, ipAddress, userAgent string) (*TokenPair, error) {
 	user, err := s.repo.GetUserByEmail(ctx, dto.Email)
 	if err != nil {
-
-		_ = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(dto.Password))
 		if errors.Is(err, repository.ErrUserNotFound) {
 			return nil, ErrInvalidCredentials
 		}
-		s.logger.Error("failed to fetch user for login", zap.String("email", user.Email))
+		s.logger.Error("failed to fetch user for login", zap.String("email", dto.Email))
 		return nil, ErrInternal
 	}
 

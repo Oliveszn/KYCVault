@@ -46,13 +46,41 @@ func NewAuthHandler(
 // @Failure      409  {object}  dtos.StructuredResponse
 // @Failure      500  {object}  dtos.StructuredResponse
 // @Router       /auth/register [post]
+// func (h *AuthHandler) Register(c *gin.Context) {
+// 	var dto dtos.RegisterUserDto
+// 	if !h.bindJSON(c, &dto) {
+// 		return
+// 	}
+
+// 	user, err := h.authSvc.Register(c.Request.Context(), dto)
+// 	if err != nil {
+// 		h.handleServiceError(c, err, map[error]int{
+// 			services.ErrUserAlreadyExists: http.StatusConflict,
+// 			services.ErrPasswordMismatch:  http.StatusBadRequest,
+// 		})
+// 		return
+// 	}
+
+//		respond(c, http.StatusCreated, "account created successfully", gin.H{
+//			"id":        user.ID,
+//			"email":     user.Email,
+//			"firstName": user.FirstName,
+//			"lastName":  user.LastName,
+//			"role":      user.Role,
+//		})
+//	}
 func (h *AuthHandler) Register(c *gin.Context) {
 	var dto dtos.RegisterUserDto
 	if !h.bindJSON(c, &dto) {
 		return
 	}
 
-	user, err := h.authSvc.Register(c.Request.Context(), dto)
+	pair, err := h.authSvc.Register(
+		c.Request.Context(),
+		dto,
+		c.ClientIP(),
+		c.Request.UserAgent(),
+	)
 	if err != nil {
 		h.handleServiceError(c, err, map[error]int{
 			services.ErrUserAlreadyExists: http.StatusConflict,
@@ -61,12 +89,18 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
+	// ✅ set refresh token cookie
+	utils.SetRefreshTokenCookie(
+		c,
+		pair.RawRefreshToken,
+		h.jwtUtil.RefreshTokenTTL(),
+		h.cookieCfg,
+	)
+
 	respond(c, http.StatusCreated, "account created successfully", gin.H{
-		"id":        user.ID,
-		"email":     user.Email,
-		"firstName": user.FirstName,
-		"lastName":  user.LastName,
-		"role":      user.Role,
+		"accessToken": pair.AccessToken,
+		"expiresIn":   pair.ExpiresIn,
+		"tokenType":   "Bearer",
 	})
 }
 
