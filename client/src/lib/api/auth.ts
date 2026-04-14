@@ -1,3 +1,4 @@
+import { ApiResponse } from "@/types/kyc";
 import { apiClient } from "../../api/client";
 import type {
   RegisterPayload,
@@ -7,21 +8,23 @@ import type {
 } from "@/types/auth";
 
 export const authApi = {
-  register: async (payload: RegisterPayload): Promise<UserResponse> => {
-    const { data } = await apiClient.post<{ payload: UserResponse }>(
+  register: async (
+    payload: RegisterPayload,
+  ): Promise<ApiResponse<AuthResponse>> => {
+    const { data } = await apiClient.post<ApiResponse<AuthResponse>>(
       "/auth/register",
       payload,
     );
-    return data.payload;
+    return data;
   },
 
-  login: async (payload: LoginPayload): Promise<AuthResponse> => {
-    const { data } = await apiClient.post<{ payload: AuthResponse }>(
+  login: async (payload: LoginPayload): Promise<ApiResponse<AuthResponse>> => {
+    const { data } = await apiClient.post<ApiResponse<AuthResponse>>(
       "/auth/login",
       payload,
     );
     // only handle accesstoken as refresh is in the httpOnly cookie.
-    return data.payload;
+    return data;
   },
 
   logout: async (): Promise<void> => {

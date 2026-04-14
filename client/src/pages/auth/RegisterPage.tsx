@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff, UserPlus, AlertCircle, Check } from "lucide-react";
@@ -16,7 +16,6 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const register_ = useRegister();
-
   const {
     register,
     handleSubmit,
@@ -114,13 +113,13 @@ export default function RegisterPage() {
             </p>
           </div>
 
-          {register_.isError && (
+          {/* {register_.isError && (
             <div className="flex items-center gap-3 p-3.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm animate-in fade-in duration-300">
               <AlertCircle className="w-4 h-4 shrink-0" />
               {(register_.error as Error)?.message ??
                 "Something went wrong. Please try again."}
             </div>
-          )}
+          )} */}
 
           <form
             onSubmit={handleSubmit(onSubmit)}

@@ -14,6 +14,7 @@ import KycForm from "./pages/KYCWizard/KycForm";
 import InitiateSession from "./components/KycForm/Step1";
 import UploadDocument from "./components/KycForm/Step2";
 import FaceVerification from "./components/KycForm/Step3";
+import { Toaster } from "./components/ui/sonner";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,6 +36,7 @@ export default function App() {
     <Provider store={store}>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
+          <Toaster position="top-right" richColors />
           <AuthProvider>
             <Routes>
               {/* Public routes redirects to /dashboard if already auth */}

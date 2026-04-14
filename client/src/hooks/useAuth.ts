@@ -4,18 +4,43 @@ import { authApi } from "@/lib/api/auth";
 import { useAppDispatch } from "@/store/hooks";
 import type { LoginPayload, RegisterPayload } from "@/types/auth";
 import { clearCredentials, setCredentials, setUser } from "@/store/auth-slice";
+import { toast } from "sonner";
+import { ApiError } from "@/types/kyc";
+import { AxiosError } from "axios";
 
 export const authKeys = {
   me: ["auth", "me"] as const,
 };
 
 export const useRegister = () => {
+  const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (payload: RegisterPayload) => authApi.register(payload),
-    onSuccess: () => {
-      navigate("/login?registered=true");
+    onSuccess: async (data) => {
+      const { payload, message } = data;
+
+      toast.success(message);
+
+      dispatch(
+        setCredentials({
+          accessToken: payload.accessToken,
+          expiresIn: payload.expiresIn,
+        }),
+      );
+
+      const user = await authApi.me();
+      dispatch(setUser(user));
+      queryClient.setQueryData(authKeys.me, user);
+
+      navigate("/dashboard");
+    },
+    onError: (err: AxiosError<ApiError>) => {
+      const message = err.response?.data?.message;
+
+      toast.error(message);
     },
   });
 };
@@ -28,19 +53,27 @@ export const useLogin = () => {
   return useMutation({
     mutationFn: (payload: LoginPayload) => authApi.login(payload),
     onSuccess: async (data) => {
+      const { payload, message } = data;
+
+      toast.success(message);
+
       dispatch(
         setCredentials({
-          accessToken: data.accessToken,
-          expiresIn: data.expiresIn,
+          accessToken: payload.accessToken,
+          expiresIn: payload.expiresIn,
         }),
       );
 
-      ///fetch user profile and cache
       const user = await authApi.me();
       dispatch(setUser(user));
       queryClient.setQueryData(authKeys.me, user);
 
       navigate("/dashboard");
+    },
+    onError: (err: AxiosError<ApiError>) => {
+      const message = err.response?.data?.message;
+
+      toast.error(message);
     },
   });
 };

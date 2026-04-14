@@ -41,7 +41,11 @@ apiClient.interceptors.response.use(
     const isRefreshEndpoint = originalRequest.url?.includes("/auth/refresh");
     const alreadyRetried = originalRequest._retry;
 
-    if (!is401 || isRefreshEndpoint || alreadyRetried) {
+    const isAuthRoute =
+      originalRequest.url?.includes("/login") ||
+      originalRequest.url?.includes("/refresh");
+
+    if (!is401 || isAuthRoute || alreadyRetried) {
       return Promise.reject(error);
     }
 
@@ -65,7 +69,7 @@ apiClient.interceptors.response.use(
       refreshPromise = null;
       // Refresh failed session is dead, logout from store and send to login.
       store.dispatch(clearCredentials());
-      window.location.href = "/login";
+      // window.location.href = "/login";
       return Promise.reject(refreshError);
     }
   },

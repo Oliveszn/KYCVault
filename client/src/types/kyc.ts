@@ -20,6 +20,11 @@ export interface ApiResponse<T> {
   payload: T;
 }
 
+export type ApiError = {
+  message: string;
+  code?: string;
+};
+
 export interface KYCSessionResponse {
   id: string;
   userId: string;

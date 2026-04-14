@@ -1,5 +1,6 @@
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -52,8 +53,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       dispatch(setUser(user));
 
       return true;
-    } catch {
-      dispatch(clearCredentials());
+    } catch (err: any) {
+      // dispatch(clearCredentials());
+      if (err?.response?.status !== 401) {
+        dispatch(clearCredentials());
+      }
       return false;
     }
   };
@@ -73,6 +77,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       });
       return;
     }
+    // if (msUntilRefresh <= 0) {
+    //   silentRefresh();
+    //   return;
+    // }
 
     refreshTimerRef.current = setTimeout(async () => {
       const ok = await silentRefresh();
@@ -85,13 +93,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   // try to restore session on mount
+  // useEffect(() => {
+  //   silentRefresh().finally(() => setIsBootstrapping(false));
+
+  //   return () => {
+  //     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+  //   };
+  // }, []);
   useEffect(() => {
-    silentRefresh().finally(() => setIsBootstrapping(false));
+    const initAuth = async () => {
+      await silentRefresh(); // try once
+      setIsBootstrapping(false);
+    };
+
+    initAuth();
 
     return () => {
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Re-schedule whenever expiry changes (login / refresh cycle)
@@ -102,7 +121,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => {
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expiresAt]);
 
   return (

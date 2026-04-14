@@ -1,4 +1,4 @@
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff, LogIn, AlertCircle, CheckCircle2 } from "lucide-react";
@@ -10,8 +10,6 @@ import { Field, inputClass } from "@/components/auth/InputClass";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
-  const [searchParams] = useSearchParams();
-  const justRegistered = searchParams.get("registered") === "true";
   const login = useLogin();
 
   const {
@@ -117,20 +115,20 @@ export default function LoginPage() {
           </div>
 
           {/* Registered success banner */}
-          {justRegistered && (
+          {/* {justRegistered && (
             <div className="flex items-center gap-3 p-3.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-500 text-sm animate-in fade-in duration-300">
               <CheckCircle2 className="w-4 h-4 shrink-0" />
               Account created! Sign in to continue.
             </div>
           )}
 
-          {/* Server error */}
+          
           {login.isError && (
             <div className="flex items-center gap-3 p-3.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm animate-in fade-in duration-300">
               <AlertCircle className="w-4 h-4 shrink-0" />
               {(login.error as Error)?.message ?? "Invalid email or password"}
             </div>
-          )}
+          )} */}
 
           <form
             onSubmit={handleSubmit(onSubmit)}
