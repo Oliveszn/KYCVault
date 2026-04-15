@@ -43,24 +43,23 @@ export default function App() {
               <Route element={<PublicOnlyRoute />}>
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
-                <Route path="/verify" element={<KycForm />}>
-                  <Route
-                    index
-                    element={<Navigate to="initiate-session" replace />}
-                  />
-                  <Route
-                    path="initiate-session"
-                    element={<InitiateSession />}
-                  />
-                  <Route path="upload-docs" element={<UploadDocument />} />
-                  <Route path="face-verify" element={<FaceVerification />} />
-                </Route>
               </Route>
 
               {/* Protected routes redirect to /login if not authed */}
               <Route element={<ProtectedRoute />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
-                {/* Add more protected routes here */}
+                <Route path="/kyc" element={<KycForm />}>
+                  <Route
+                    index
+                    element={<Navigate to="/sessions/new" replace />}
+                  />
+
+                  <Route path="sessions">
+                    <Route path="new" element={<InitiateSession />} />
+                    <Route path=":id/documents" element={<UploadDocument />} />
+                    <Route path=":id/face" element={<FaceVerification />} />
+                  </Route>
+                </Route>
               </Route>
 
               {/* <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
