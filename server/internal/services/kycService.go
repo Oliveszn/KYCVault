@@ -13,11 +13,11 @@ import (
 )
 
 var (
-	ErrSessionNotFound         = errors.New("kyc session not found")
-	ErrSessionAlreadyActive    = errors.New("you already have an active kyc session in progress")
-	ErrSessionNotOwned         = errors.New("you do not have access to this session")
-	ErrInvalidStatusTransition = errors.New("this action is not allowed at the current stage")
-	ErrSessionAlreadyTerminal  = errors.New("this session has already been completed")
+	ErrSessionNotFound         = errors.New("Kyc session not found")
+	ErrSessionAlreadyActive    = errors.New("You already have an active kyc session in progress")
+	ErrSessionNotOwned         = errors.New("You do not have access to this session")
+	ErrInvalidStatusTransition = errors.New("This action is not allowed at the current stage")
+	ErrSessionAlreadyTerminal  = errors.New("This session has already been completed")
 )
 
 var allowedTransitions = map[models.KYCStatus][]models.KYCStatus{
@@ -177,6 +177,9 @@ func (s *kycService) GetActiveSessionForUser(ctx context.Context, userID uuid.UU
 
 // GetSessionHistoryForUser returns all sessions for a user, terminal and active.
 func (s *kycService) GetSessionHistoryForUser(ctx context.Context, userID uuid.UUID) ([]models.KYCSession, error) {
+	s.logger.Info("fetching sessions",
+		zap.String("user_id", userID.String()),
+	)
 	sessions, err := s.repo.GetSessionsByUserID(ctx, userID)
 	if err != nil {
 		return nil, ErrInternal

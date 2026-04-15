@@ -82,14 +82,14 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		c.Request.UserAgent(),
 	)
 	if err != nil {
-		h.handleServiceError(c, err, map[error]int{
+		handleServiceError(c, h.logger, err, map[error]int{
 			services.ErrUserAlreadyExists: http.StatusConflict,
 			services.ErrPasswordMismatch:  http.StatusBadRequest,
 		})
 		return
 	}
 
-	// ✅ set refresh token cookie
+	//set refresh token cookie
 	utils.SetRefreshTokenCookie(
 		c,
 		pair.RawRefreshToken,
@@ -97,7 +97,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		h.cookieCfg,
 	)
 
-	respond(c, http.StatusCreated, "account created successfully", gin.H{
+	respond(c, http.StatusCreated, "Account created successfully", gin.H{
 		"accessToken": pair.AccessToken,
 		"expiresIn":   pair.ExpiresIn,
 		"tokenType":   "Bearer",
@@ -129,7 +129,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		c.Request.UserAgent(),
 	)
 	if err != nil {
-		h.handleServiceError(c, err, map[error]int{
+		handleServiceError(c, h.logger, err, map[error]int{
 			services.ErrInvalidCredentials: http.StatusUnauthorized,
 		})
 		return
@@ -138,7 +138,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// Refresh token goes into a secure httpOnly cookie — never in the body.
 	utils.SetRefreshTokenCookie(c, pair.RawRefreshToken, h.jwtUtil.RefreshTokenTTL(), h.cookieCfg)
 
-	respond(c, http.StatusOK, "login successful", gin.H{
+	respond(c, http.StatusOK, "Login successful", gin.H{
 		"accessToken": pair.AccessToken,
 		"expiresIn":   pair.ExpiresIn,
 		"tokenType":   "Bearer",
@@ -172,7 +172,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		if errors.Is(err, services.ErrRefreshTokenReuse) {
 			utils.ClearRefreshTokenCookie(c, h.cookieCfg)
 		}
-		h.handleServiceError(c, err, map[error]int{
+		handleServiceError(c, h.logger, err, map[error]int{
 			services.ErrRefreshTokenInvalid: http.StatusUnauthorized,
 			services.ErrRefreshTokenExpired: http.StatusUnauthorized,
 			services.ErrRefreshTokenReuse:   http.StatusUnauthorized,
@@ -182,7 +182,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 
 	utils.SetRefreshTokenCookie(c, pair.RawRefreshToken, h.jwtUtil.RefreshTokenTTL(), h.cookieCfg)
 
-	respond(c, http.StatusOK, "tokens refreshed", gin.H{
+	respond(c, http.StatusOK, "Tokens refreshed", gin.H{
 		"accessToken": pair.AccessToken,
 		"expiresIn":   pair.ExpiresIn,
 		"tokenType":   "Bearer",
@@ -209,7 +209,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	}
 
 	utils.ClearRefreshTokenCookie(c, h.cookieCfg)
-	respond(c, http.StatusOK, "logged out successfully", nil)
+	respond(c, http.StatusOK, "Logged out successfully", nil)
 }
 
 // LogoutAll godoc
@@ -234,7 +234,7 @@ func (h *AuthHandler) LogoutAll(c *gin.Context) {
 	}
 
 	utils.ClearRefreshTokenCookie(c, h.cookieCfg)
-	respond(c, http.StatusOK, "all sessions terminated", nil)
+	respond(c, http.StatusOK, "All sessions terminated", nil)
 }
 
 // Me godoc
@@ -268,23 +268,4 @@ func (h *AuthHandler) bindJSON(c *gin.Context, dst interface{}) bool {
 		return false
 	}
 	return true
-}
-
-// handleServiceError maps service-layer sentinel errors to HTTP status codes.
-// Falls back to 500 for unmapped errors and logs them.
-func (h *AuthHandler) handleServiceError(c *gin.Context, err error, statusMap map[error]int) {
-	for sentinel, status := range statusMap {
-		if errors.Is(err, sentinel) {
-			respondError(c, status, err.Error())
-			return
-		}
-	}
-
-	// Unmapped — treat as internal error; do not leak details to the client.
-	h.logger.Error("unhandled service error",
-		zap.String("error", err.Error()),
-		zap.String("path", c.FullPath()),
-		zap.String("method", c.Request.Method),
-	)
-	respondError(c, http.StatusInternalServerError, "an unexpected error occurred")
 }

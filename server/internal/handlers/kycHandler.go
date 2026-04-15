@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"kycvault/internal/dtos"
 	"kycvault/internal/middleware"
 	"kycvault/internal/models"
@@ -46,7 +45,7 @@ func (h *KYCHandler) InitiateSession(c *gin.Context) {
 
 	session, err := h.kycSvc.InitiateSession(c.Request.Context(), userID, dto)
 	if err != nil {
-		h.handleServiceError(c, err, map[error]int{
+		handleServiceError(c, h.logger, err, map[error]int{
 			services.ErrSessionAlreadyActive: http.StatusConflict,
 		})
 		return
@@ -68,8 +67,8 @@ func (h *KYCHandler) GetActiveSession(c *gin.Context) {
 
 	session, err := h.kycSvc.GetActiveSessionForUser(c.Request.Context(), userID)
 	if err != nil {
-		h.handleServiceError(c, err, map[error]int{
-			services.ErrSessionNotFound: http.StatusNotFound,
+		handleServiceError(c, h.logger, err, map[error]int{
+			services.ErrSessionAlreadyActive: http.StatusConflict,
 		})
 		return
 	}
@@ -95,7 +94,7 @@ func (h *KYCHandler) GetSession(c *gin.Context) {
 
 	session, err := h.kycSvc.GetSessionForUser(c.Request.Context(), sessionID, userID)
 	if err != nil {
-		h.handleServiceError(c, err, map[error]int{
+		handleServiceError(c, h.logger, err, map[error]int{
 			services.ErrSessionNotFound: http.StatusNotFound,
 		})
 		return
@@ -116,7 +115,7 @@ func (h *KYCHandler) GetSessionHistory(c *gin.Context) {
 
 	sessions, err := h.kycSvc.GetSessionHistoryForUser(c.Request.Context(), userID)
 	if err != nil {
-		h.handleServiceError(c, err, nil)
+		handleServiceError(c, h.logger, err, nil)
 		return
 	}
 
@@ -141,7 +140,7 @@ func (h *KYCHandler) GetSessionQueue(c *gin.Context) {
 
 	sessions, total, err := h.kycSvc.GetSessionQueue(c.Request.Context(), limit, offset)
 	if err != nil {
-		h.handleServiceError(c, err, nil)
+		handleServiceError(c, h.logger, err, nil)
 		return
 	}
 
@@ -164,7 +163,7 @@ func (h *KYCHandler) GetSessionQueue(c *gin.Context) {
 func (h *KYCHandler) GetStatusCounts(c *gin.Context) {
 	counts, err := h.kycSvc.GetStatusCounts(c.Request.Context())
 	if err != nil {
-		h.handleServiceError(c, err, nil)
+		handleServiceError(c, h.logger, err, nil)
 		return
 	}
 	respond(c, http.StatusOK, "status counts retrieved", counts)
@@ -181,7 +180,7 @@ func (h *KYCHandler) GetSessionAdmin(c *gin.Context) {
 
 	session, err := h.kycSvc.GetSession(c.Request.Context(), sessionID)
 	if err != nil {
-		h.handleServiceError(c, err, map[error]int{
+		handleServiceError(c, h.logger, err, map[error]int{
 			services.ErrSessionNotFound: http.StatusNotFound,
 		})
 		return
@@ -211,7 +210,7 @@ func (h *KYCHandler) ApproveSession(c *gin.Context) {
 	}
 
 	if err := h.kycSvc.ApproveSession(c.Request.Context(), sessionID, reviewerID, dto.Note); err != nil {
-		h.handleServiceError(c, err, map[error]int{
+		handleServiceError(c, h.logger, err, map[error]int{
 			services.ErrSessionNotFound:         http.StatusNotFound,
 			services.ErrSessionAlreadyTerminal:  http.StatusConflict,
 			services.ErrInvalidStatusTransition: http.StatusUnprocessableEntity,
@@ -243,7 +242,7 @@ func (h *KYCHandler) RejectSession(c *gin.Context) {
 	}
 
 	if err := h.kycSvc.RejectSession(c.Request.Context(), sessionID, reviewerID, dto.Note, dto.Reason); err != nil {
-		h.handleServiceError(c, err, map[error]int{
+		handleServiceError(c, h.logger, err, map[error]int{
 			services.ErrSessionNotFound:         http.StatusNotFound,
 			services.ErrSessionAlreadyTerminal:  http.StatusConflict,
 			services.ErrInvalidStatusTransition: http.StatusUnprocessableEntity,
@@ -258,6 +257,9 @@ func (h *KYCHandler) RejectSession(c *gin.Context) {
 
 func (h *KYCHandler) bindJSON(c *gin.Context, dto any) bool {
 	if err := c.ShouldBindJSON(dto); err != nil {
+		h.logger.Error("bind error",
+			zap.Error(err),
+		)
 		respondError(c, http.StatusBadRequest, err.Error())
 		return false
 	}
@@ -284,17 +286,6 @@ func (h *KYCHandler) parsePagination(c *gin.Context) (limit, offset int) {
 		offset = o
 	}
 	return
-}
-
-func (h *KYCHandler) handleServiceError(c *gin.Context, err error, statusMap map[error]int) {
-	for target, code := range statusMap {
-		if errors.Is(err, target) {
-			respondError(c, code, err.Error())
-			return
-		}
-	}
-	h.logger.Error("unhandled service error", zap.Error(err))
-	respondError(c, http.StatusInternalServerError, "an internal error occurred")
 }
 
 // toSessionResponse converts the model to the API response shape.

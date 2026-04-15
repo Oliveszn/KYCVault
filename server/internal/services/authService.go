@@ -16,13 +16,13 @@ import (
 )
 
 var (
-	ErrInvalidCredentials  = errors.New("invalid email or password")
-	ErrUserAlreadyExists   = errors.New("an account with this email already exists")
-	ErrPasswordMismatch    = errors.New("passwords do not match")
-	ErrRefreshTokenInvalid = errors.New("refresh token is invalid")
-	ErrRefreshTokenExpired = errors.New("refresh token has expired")
-	ErrRefreshTokenReuse   = errors.New("refresh token reuse detected — all sessions have been terminated")
-	ErrInternal            = errors.New("an internal error occurred")
+	ErrInvalidCredentials  = errors.New("Invalid email or password")
+	ErrUserAlreadyExists   = errors.New("An account with this email already exists")
+	ErrPasswordMismatch    = errors.New("Passwords do not match")
+	ErrRefreshTokenInvalid = errors.New("Refresh token is invalid")
+	ErrRefreshTokenExpired = errors.New("Refresh token has expired")
+	ErrRefreshTokenReuse   = errors.New("Refresh token reuse detected — all sessions have been terminated")
+	ErrInternal            = errors.New("An internal error occurred")
 )
 
 // TokenPair is the value object returned after a successful auth operation.

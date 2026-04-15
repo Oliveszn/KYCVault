@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"kycvault/internal/middleware"
 	"kycvault/internal/models"
 	"kycvault/internal/services"
@@ -74,7 +73,7 @@ func (h *DocumentHandler) UploadDocument(c *gin.Context) {
 		UserAgent:  c.Request.UserAgent(),
 	})
 	if err != nil {
-		h.handleServiceError(c, err, map[error]int{
+		handleServiceError(c, h.logger, err, map[error]int{
 			services.ErrSessionNotFound:     http.StatusNotFound,
 			services.ErrSessionWrongStage:   http.StatusConflict,
 			services.ErrInvalidDocumentSide: http.StatusBadRequest,
@@ -84,7 +83,7 @@ func (h *DocumentHandler) UploadDocument(c *gin.Context) {
 		return
 	}
 
-	respond(c, http.StatusCreated, "document uploaded successfully", toDocumentResponse(doc))
+	respond(c, http.StatusCreated, "Document uploaded successfully", toDocumentResponse(doc))
 }
 
 // ListDocuments
@@ -104,7 +103,7 @@ func (h *DocumentHandler) ListDocuments(c *gin.Context) {
 
 	docs, err := h.docSvc.GetDocumentsForSession(c.Request.Context(), sessionID, userID)
 	if err != nil {
-		h.handleServiceError(c, err, map[error]int{
+		handleServiceError(c, h.logger, err, map[error]int{
 			services.ErrSessionNotFound: http.StatusNotFound,
 		})
 		return
@@ -115,7 +114,7 @@ func (h *DocumentHandler) ListDocuments(c *gin.Context) {
 		items = append(items, toDocumentResponse(&docs[i]))
 	}
 
-	respond(c, http.StatusOK, "documents retrieved", gin.H{
+	respond(c, http.StatusOK, "Documents retrieved", gin.H{
 		"documents": items,
 		"count":     len(items),
 	})
@@ -133,13 +132,13 @@ func (h *DocumentHandler) GetPresignedURL(c *gin.Context) {
 
 	url, err := h.docSvc.GetPresignedURL(c.Request.Context(), docID)
 	if err != nil {
-		h.handleServiceError(c, err, map[error]int{
+		handleServiceError(c, h.logger, err, map[error]int{
 			services.ErrDocumentNotFound: http.StatusNotFound,
 		})
 		return
 	}
 
-	respond(c, http.StatusOK, "presigned url generated", gin.H{
+	respond(c, http.StatusOK, "Presigned url generated", gin.H{
 		"url":        url,
 		"expires_in": "15m",
 	})
@@ -154,17 +153,6 @@ func (h *DocumentHandler) parseUUID(c *gin.Context, param string) (uuid.UUID, bo
 		return uuid.Nil, false
 	}
 	return id, true
-}
-
-func (h *DocumentHandler) handleServiceError(c *gin.Context, err error, statusMap map[error]int) {
-	for target, code := range statusMap {
-		if errors.Is(err, target) {
-			respondError(c, code, err.Error())
-			return
-		}
-	}
-	h.logger.Error("unhandled document service error", zap.Error(err))
-	respondError(c, http.StatusInternalServerError, "an internal error occurred")
 }
 
 // Response shape

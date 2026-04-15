@@ -20,13 +20,13 @@ import (
 )
 
 var (
-	ErrDocumentNotFound      = errors.New("document not found")
-	ErrDocumentNotOwned      = errors.New("document does not belong to this session")
-	ErrInvalidFileType       = errors.New("file type not allowed; accepted types: jpeg, png, pdf")
-	ErrFileTooLarge          = errors.New("file exceeds the maximum allowed size of 10 MB")
-	ErrInvalidDocumentSide   = errors.New("side must be 'front' or 'back'")
-	ErrSessionWrongStage     = errors.New("session is not at the document upload stage")
-	ErrDocumentSetIncomplete = errors.New("both front and back documents must be accepted before proceeding")
+	ErrDocumentNotFound      = errors.New("Document not found")
+	ErrDocumentNotOwned      = errors.New("Document does not belong to this session")
+	ErrInvalidFileType       = errors.New("File type not allowed; accepted types: jpeg, png, pdf")
+	ErrFileTooLarge          = errors.New("File exceeds the maximum allowed size of 10 MB")
+	ErrInvalidDocumentSide   = errors.New("Side must be 'front' or 'back'")
+	ErrSessionWrongStage     = errors.New("Session is not at the document upload stage")
+	ErrDocumentSetIncomplete = errors.New("Both front and back documents must be accepted before proceeding")
 )
 
 const (

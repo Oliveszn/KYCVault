@@ -19,12 +19,12 @@ import (
 )
 
 var (
-	ErrFaceVerificationNotFound = errors.New("face verification not found")
-	ErrFaceSessionWrongStage    = errors.New("session is not at the face verification stage")
-	ErrFaceMaxAttemptsReached   = errors.New("maximum face verification attempts reached")
-	ErrFaceDocumentNotReady     = errors.New("document images are not available for face matching")
-	ErrFaceUnsupportedIDType    = errors.New("id type is not supported for this country")
-	ErrFaceVerificationPending  = errors.New("face verification is already in progress")
+	ErrFaceVerificationNotFound = errors.New("Face verification not found")
+	ErrFaceSessionWrongStage    = errors.New("Session is not at the face verification stage")
+	ErrFaceMaxAttemptsReached   = errors.New("Maximum face verification attempts reached")
+	ErrFaceDocumentNotReady     = errors.New("Document images are not available for face matching")
+	ErrFaceUnsupportedIDType    = errors.New("ID type is not supported for this country")
+	ErrFaceVerificationPending  = errors.New("Face verification is already in progress")
 )
 
 const (

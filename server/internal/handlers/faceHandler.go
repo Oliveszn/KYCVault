@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"errors"
-
 	"kycvault/internal/middleware"
 	"kycvault/internal/models"
 	"kycvault/internal/services"
@@ -70,7 +68,7 @@ func (h *FaceHandler) StartVerification(c *gin.Context) {
 		UserAgent:  c.Request.UserAgent(),
 	})
 	if err != nil {
-		h.handleServiceError(c, err, map[error]int{
+		handleServiceError(c, h.logger, err, map[error]int{
 			services.ErrSessionNotFound:         http.StatusNotFound,
 			services.ErrFaceSessionWrongStage:   http.StatusConflict,
 			services.ErrFaceVerificationPending: http.StatusConflict,
@@ -81,7 +79,7 @@ func (h *FaceHandler) StartVerification(c *gin.Context) {
 		return
 	}
 
-	respond(c, http.StatusOK, "face verification completed", toFaceResponse(fv))
+	respond(c, http.StatusOK, "Face verification completed", toFaceResponse(fv))
 }
 
 // GetVerification godoc
@@ -104,14 +102,14 @@ func (h *FaceHandler) GetVerification(c *gin.Context) {
 
 	fv, err := h.faceSvc.GetVerificationForUser(c.Request.Context(), sessionID, userID)
 	if err != nil {
-		h.handleServiceError(c, err, map[error]int{
+		handleServiceError(c, h.logger, err, map[error]int{
 			services.ErrSessionNotFound:          http.StatusNotFound,
 			services.ErrFaceVerificationNotFound: http.StatusNotFound,
 		})
 		return
 	}
 
-	respond(c, http.StatusOK, "face verification retrieved", toFaceResponse(fv))
+	respond(c, http.StatusOK, "Face verification retrieved", toFaceResponse(fv))
 }
 
 // HELPERS
@@ -123,17 +121,6 @@ func (h *FaceHandler) parseUUID(c *gin.Context, param string) (uuid.UUID, bool) 
 		return uuid.Nil, false
 	}
 	return id, true
-}
-
-func (h *FaceHandler) handleServiceError(c *gin.Context, err error, statusMap map[error]int) {
-	for target, code := range statusMap {
-		if errors.Is(err, target) {
-			respondError(c, code, err.Error())
-			return
-		}
-	}
-	h.logger.Error("unhandled face service error", zap.Error(err))
-	respondError(c, http.StatusInternalServerError, "an internal error occurred")
 }
 
 //Response shape
