@@ -204,16 +204,33 @@ func (s *kycService) AdvanceStatus(ctx context.Context, sessionID uuid.UUID, to 
 		return err
 	}
 
-	fields := buildUpdateFields(to, meta)
+	// fields := buildUpdateFields(to, meta)
 
-	if err := s.repo.UpdateSessionStatus(ctx, sessionID, to, fields); err != nil {
+	// if err := s.repo.UpdateSessionStatus(ctx, sessionID, to, fields); err != nil {
+	// 	s.logger.Error("failed to advance session status",
+	// 		zap.String("session_id", sessionID.String()),
+	// 		zap.String("from", string(session.Status)),
+	// 		zap.String("to", string(to)),
+	// 		zap.Error(err),
+	// 	)
+	// 	return ErrInternal
+	// }
+	updated, err := s.repo.AdvanceStatusIfCurrent(
+		ctx,
+		sessionID,
+		session.Status,
+		to,
+	)
+	if err != nil {
 		s.logger.Error("failed to advance session status",
 			zap.String("session_id", sessionID.String()),
-			zap.String("from", string(session.Status)),
-			zap.String("to", string(to)),
 			zap.Error(err),
 		)
 		return ErrInternal
+	}
+
+	if !updated {
+		return nil
 	}
 
 	s.audit.Log(ctx, models.AuditEvent{

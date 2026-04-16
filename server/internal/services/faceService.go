@@ -40,6 +40,7 @@ type FaceService interface {
 	// GetVerification returns the face verification for a session.
 
 	GetVerificationForUser(ctx context.Context, sessionID, userID uuid.UUID) (*models.FaceVerification, error)
+	ReviewVerification(ctx context.Context, verificationID, reviewerID uuid.UUID, passed bool, note string) error
 }
 
 // StartVerificationRequest carries the selfie data parsed by the handler.
@@ -84,14 +85,191 @@ func NewFaceService(
 	}
 }
 
+// func (s *faceService) StartVerification(ctx context.Context, req StartVerificationRequest) (*models.FaceVerification, error) {
+// 	// Load session and ownership check
+// 	session, err := s.kycSvc.GetSessionForUser(ctx, req.SessionID, req.UserID)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	//
+// 	if session.Status != models.KYCStatusFaceVerify {
+// 		return nil, ErrFaceSessionWrongStage
+// 	}
+
+// 	// check if there's already a pending verification
+// 	existing, err := s.faceRepo.GetBySessionID(ctx, req.SessionID)
+// 	if err != nil && !errors.Is(err, repository.ErrFaceVerificationNotFound) {
+// 		return nil, ErrInternal
+// 	}
+// 	if existing != nil && existing.Status == models.FaceVerificationStatusPending {
+// 		return nil, ErrFaceVerificationPending
+// 	}
+
+// 	// enforcing max attempts
+// 	if existing != nil && existing.AttemptCount >= maxFaceAttempts {
+// 		return nil, ErrFaceMaxAttemptsReached
+// 	}
+
+// 	// validate and read the selfie
+// 	selfieBytes, err := readSelfie(req.FileHeader)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	checksum := computeChecksum(selfieBytes)
+
+// 	//load the front document for face match chech
+// 	frontDoc, err := s.docRepo.GetAcceptedDocument(ctx, req.SessionID, models.DocumentSideFront)
+// 	if err != nil {
+// 		if errors.Is(err, repository.ErrDocumentNotFound) {
+// 			return nil, ErrFaceDocumentNotReady
+// 		}
+// 		return nil, ErrInternal
+// 	}
+
+// 	//seting IDs up front to use as storage key facepp id
+// 	verificationID := uuid.New()
+// 	if existing != nil {
+// 		// Reuse the same record ID on retry so there's always one row per session.
+// 		verificationID = existing.ID
+// 	}
+
+// 	selfieKey := storage.KeyForSelfie(req.SessionID.String(), verificationID.String())
+
+// 	//build and upsert the verification record before sending to vendor
+// 	//if the upload to facpp fails we have a pending row so admin can inspect
+// 	attemptCount := 1
+// 	if existing != nil {
+// 		attemptCount = existing.AttemptCount + 1
+// 	}
+
+// 	fv := &models.FaceVerification{
+// 		ID:                  verificationID,
+// 		SessionID:           req.SessionID,
+// 		UserID:              req.UserID,
+// 		Status:              models.FaceVerificationStatusPending,
+// 		SelfieStorageKey:    selfieKey,
+// 		SelfieStorageBucket: s.bucket,
+// 		SelfieChecksum:      checksum,
+// 		VendorName:          "facepp",
+// 		VendorRequestID:     verificationID.String(), // we use our ID as the facepp ID
+// 		AttemptCount:        attemptCount,
+// 	}
+
+// 	if err := s.faceRepo.UpsertVerification(ctx, fv); err != nil {
+// 		s.logger.Error("failed to upsert face verification record",
+// 			zap.String("session_id", req.SessionID.String()),
+// 			zap.Error(err),
+// 		)
+// 		return nil, ErrInternal
+// 	}
+
+// 	//store the selfie in object storage
+// 	if err := s.storage.Put(
+// 		ctx,
+// 		s.bucket,
+// 		selfieKey,
+// 		bytes.NewReader(selfieBytes),
+// 		int64(len(selfieBytes)),
+// 		"image/jpeg",
+// 	); err != nil {
+// 		s.logger.Error("selfie storage upload failed",
+// 			zap.String("verification_id", verificationID.String()),
+// 			zap.Error(err),
+// 		)
+// 		// Mark failed so the user can retry — don't leave them stuck on pending.
+// 		_ = s.faceRepo.UpdateResult(ctx, verificationID, map[string]any{
+// 			"status":         models.FaceVerificationStatusFailed,
+// 			"failure_reason": "selfie upload failed; please retry",
+// 		})
+// 		return nil, ErrInternal
+// 	}
+
+// 	// fetch the documnet and load
+
+// 	docBytes, err := s.fetchStorageBytes(ctx, frontDoc.StorageBucket, frontDoc.StorageKey)
+// 	if err != nil {
+// 		s.logger.Error("failed to fetch front document for facepp submission",
+// 			zap.String("doc_id", frontDoc.ID.String()),
+// 			zap.Error(err),
+// 		)
+// 		return nil, ErrInternal
+// 	}
+// 	result, err := s.facepp.CompareFaces(ctx, selfieBytes, docBytes)
+// 	if err != nil {
+// 		s.logger.Error("face++ compare failed",
+// 			zap.String("verification_id", verificationID.String()),
+// 			zap.Error(err),
+// 		)
+
+// 		_ = s.faceRepo.UpdateResult(ctx, verificationID, map[string]any{
+// 			"status":         models.FaceVerificationStatusFailed,
+// 			"failure_reason": "face verification failed; please retry",
+// 		})
+
+// 		return nil, ErrInternal
+// 	}
+
+// 	// decide if pass or fail
+// 	passed := result.Confidence >= 80.0
+
+// 	status := models.FaceVerificationStatusFailed
+// 	if passed {
+// 		status = models.FaceVerificationStatusPassed
+// 	}
+
+// 	err = s.faceRepo.UpdateResult(ctx, verificationID, map[string]any{
+// 		"status":            status,
+// 		"match_score":       result.Confidence,
+// 		"match_threshold":   80.0,
+// 		"match_passed":      passed,
+// 		"vendor_name":       "facepp",
+// 		"vendor_raw_result": mustJSON(result),
+// 	})
+
+// 	if err != nil {
+// 		return nil, ErrInternal
+// 	}
+
+// 	s.audit.Log(ctx, models.AuditEvent{
+// 		ActorID:   &req.UserID,
+// 		ActorRole: "user",
+// 		SessionID: &req.SessionID,
+// 		UserID:    &req.UserID,
+// 		EventType: models.AuditEventFaceVerifyPassed,
+// 		IPAddress: req.IPAddress,
+// 		UserAgent: req.UserAgent,
+// 		Metadata: mustJSON(map[string]any{
+// 			"verification_id": verificationID,
+// 			"attempt_count":   attemptCount,
+// 			"vendor":          "facepp",
+// 		}),
+// 	})
+
+// 	s.logger.Info("face verification submitted to facepp",
+// 		zap.String("verification_id", verificationID.String()),
+// 		zap.String("session_id", req.SessionID.String()),
+// 		zap.Int("attempt", attemptCount),
+// 	)
+
+//		// advance session
+//		if passed {
+//			if err := s.handlePass(ctx, fv); err != nil {
+//				return nil, err
+//			}
+//		} else {
+//			if err := s.handleFail(ctx, fv, "face mismatch"); err != nil {
+//				return nil, err
+//			}
+//		}
+//		return fv, nil
+//	}
 func (s *faceService) StartVerification(ctx context.Context, req StartVerificationRequest) (*models.FaceVerification, error) {
-	// Load session and ownership check
 	session, err := s.kycSvc.GetSessionForUser(ctx, req.SessionID, req.UserID)
 	if err != nil {
 		return nil, err
 	}
 
-	//
 	if session.Status != models.KYCStatusFaceVerify {
 		return nil, ErrFaceSessionWrongStage
 	}
@@ -104,54 +282,40 @@ func (s *faceService) StartVerification(ctx context.Context, req StartVerificati
 	if existing != nil && existing.Status == models.FaceVerificationStatusPending {
 		return nil, ErrFaceVerificationPending
 	}
-
-	// enforcing max attempts
+	//check for max attempts
 	if existing != nil && existing.AttemptCount >= maxFaceAttempts {
 		return nil, ErrFaceMaxAttemptsReached
 	}
 
-	// validate and read the selfie
+	//validate and read selfie
 	selfieBytes, err := readSelfie(req.FileHeader)
 	if err != nil {
 		return nil, err
 	}
 	checksum := computeChecksum(selfieBytes)
 
-	//load the front document for face match chech
-	frontDoc, err := s.docRepo.GetAcceptedDocument(ctx, req.SessionID, models.DocumentSideFront)
-	if err != nil {
-		if errors.Is(err, repository.ErrDocumentNotFound) {
-			return nil, ErrFaceDocumentNotReady
-		}
-		return nil, ErrInternal
-	}
-
-	//seting IDs up front to use as storage key facepp id
 	verificationID := uuid.New()
 	if existing != nil {
-		// Reuse the same record ID on retry so there's always one row per session.
 		verificationID = existing.ID
 	}
 
-	selfieKey := storage.KeyForSelfie(req.SessionID.String(), verificationID.String())
-
-	//build and upsert the verification record before sending to vendor
-	//if the upload to facpp fails we have a pending row so admin can inspect
 	attemptCount := 1
 	if existing != nil {
 		attemptCount = existing.AttemptCount + 1
 	}
 
+	selfieKey := storage.KeyForSelfie(req.SessionID.String(), verificationID.String())
+
 	fv := &models.FaceVerification{
 		ID:                  verificationID,
 		SessionID:           req.SessionID,
 		UserID:              req.UserID,
-		Status:              models.FaceVerificationStatusPending,
+		Status:              models.FaceVerificationStatusPending, // stays pending until admin reviews
 		SelfieStorageKey:    selfieKey,
 		SelfieStorageBucket: s.bucket,
 		SelfieChecksum:      checksum,
-		VendorName:          "facepp",
-		VendorRequestID:     verificationID.String(), // we use our ID as the facepp ID
+		VendorName:          "manual",
+		VendorRequestID:     verificationID.String(),
 		AttemptCount:        attemptCount,
 	}
 
@@ -164,19 +328,7 @@ func (s *faceService) StartVerification(ctx context.Context, req StartVerificati
 	}
 
 	//store the selfie in object storage
-	if err := s.storage.Put(
-		ctx,
-		s.bucket,
-		selfieKey,
-		bytes.NewReader(selfieBytes),
-		int64(len(selfieBytes)),
-		"image/jpeg",
-	); err != nil {
-		s.logger.Error("selfie storage upload failed",
-			zap.String("verification_id", verificationID.String()),
-			zap.Error(err),
-		)
-		// Mark failed so the user can retry — don't leave them stuck on pending.
+	if err := s.storage.Put(ctx, s.bucket, selfieKey, bytes.NewReader(selfieBytes), int64(len(selfieBytes)), "image/jpeg"); err != nil {
 		_ = s.faceRepo.UpdateResult(ctx, verificationID, map[string]any{
 			"status":         models.FaceVerificationStatusFailed,
 			"failure_reason": "selfie upload failed; please retry",
@@ -184,49 +336,20 @@ func (s *faceService) StartVerification(ctx context.Context, req StartVerificati
 		return nil, ErrInternal
 	}
 
-	// fetch the documnet and load
-
-	docBytes, err := s.fetchStorageBytes(ctx, frontDoc.StorageBucket, frontDoc.StorageKey)
-	if err != nil {
-		s.logger.Error("failed to fetch front document for facepp submission",
-			zap.String("doc_id", frontDoc.ID.String()),
+	// advance session to in_review so admin can pick it up
+	if err := s.kycSvc.AdvanceStatus(
+		ctx,
+		req.SessionID,
+		models.KYCStatusInReview,
+		StatusMeta{
+			VendorName:      "manual",
+			VendorSessionID: verificationID.String(),
+		},
+	); err != nil {
+		s.logger.Error("failed to advance session to in_review",
+			zap.String("session_id", req.SessionID.String()),
 			zap.Error(err),
 		)
-		return nil, ErrInternal
-	}
-	result, err := s.facepp.CompareFaces(ctx, selfieBytes, docBytes)
-	if err != nil {
-		s.logger.Error("face++ compare failed",
-			zap.String("verification_id", verificationID.String()),
-			zap.Error(err),
-		)
-
-		_ = s.faceRepo.UpdateResult(ctx, verificationID, map[string]any{
-			"status":         models.FaceVerificationStatusFailed,
-			"failure_reason": "face verification failed; please retry",
-		})
-
-		return nil, ErrInternal
-	}
-
-	// decide if pass or fail
-	passed := result.Confidence >= 80.0
-
-	status := models.FaceVerificationStatusFailed
-	if passed {
-		status = models.FaceVerificationStatusPassed
-	}
-
-	err = s.faceRepo.UpdateResult(ctx, verificationID, map[string]any{
-		"status":            status,
-		"match_score":       result.Confidence,
-		"match_threshold":   80.0,
-		"match_passed":      passed,
-		"vendor_name":       "facepp",
-		"vendor_raw_result": mustJSON(result),
-	})
-
-	if err != nil {
 		return nil, ErrInternal
 	}
 
@@ -235,32 +358,11 @@ func (s *faceService) StartVerification(ctx context.Context, req StartVerificati
 		ActorRole: "user",
 		SessionID: &req.SessionID,
 		UserID:    &req.UserID,
-		EventType: models.AuditEventFaceVerifyPassed,
+		EventType: models.AuditEventFaceVerifyPassed, // rename to submitted if you want
 		IPAddress: req.IPAddress,
 		UserAgent: req.UserAgent,
-		Metadata: mustJSON(map[string]any{
-			"verification_id": verificationID,
-			"attempt_count":   attemptCount,
-			"vendor":          "facepp",
-		}),
 	})
 
-	s.logger.Info("face verification submitted to facepp",
-		zap.String("verification_id", verificationID.String()),
-		zap.String("session_id", req.SessionID.String()),
-		zap.Int("attempt", attemptCount),
-	)
-
-	// advance session
-	if passed {
-		if err := s.handlePass(ctx, fv); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := s.handleFail(ctx, fv, "face mismatch"); err != nil {
-			return nil, err
-		}
-	}
 	return fv, nil
 }
 
@@ -279,6 +381,47 @@ func (s *faceService) GetVerificationForUser(ctx context.Context, sessionID, use
 		return nil, ErrInternal
 	}
 	return fv, nil
+}
+
+// ADMIN
+func (s *faceService) ReviewVerification(ctx context.Context, verificationID, reviewerID uuid.UUID, passed bool, note string) error {
+	fv, err := s.faceRepo.GetByID(ctx, verificationID)
+	if err != nil {
+		return ErrFaceVerificationNotFound
+	}
+
+	status := models.FaceVerificationStatusFailed
+	if passed {
+		status = models.FaceVerificationStatusPassed
+	}
+
+	if err := s.faceRepo.UpdateResult(ctx, verificationID, map[string]any{
+		"status":         status,
+		"failure_reason": note,
+		"vendor_name":    "manual",
+	}); err != nil {
+		return ErrInternal
+	}
+
+	if passed {
+		if err := s.handlePass(ctx, fv); err != nil {
+			return err
+		}
+	} else {
+		if err := s.handleFail(ctx, fv, note); err != nil {
+			return err
+		}
+	}
+
+	s.audit.Log(ctx, models.AuditEvent{
+		ActorID:   &reviewerID,
+		ActorRole: "admin",
+		SessionID: &fv.SessionID,
+		UserID:    &fv.UserID,
+		EventType: models.AuditEventFaceVerifyStarted,
+	})
+
+	return nil
 }
 
 // HELPERS
@@ -318,8 +461,8 @@ func (s *faceService) handleFail(ctx context.Context, fv *models.FaceVerificatio
 		return nil
 	}
 
-	// All attempts exhausted — reject the session. The user will need to start
-	// a new session after the rejection.
+	// 	// All attempts exhausted — reject the session. The user will need to start
+	// 	// a new session after the rejection.
 	s.logger.Warn("face verification failed — max attempts reached, rejecting session",
 		zap.String("session_id", fv.SessionID.String()),
 	)

@@ -124,7 +124,7 @@ func (r *kycRepository) UpdateSessionStatus(ctx context.Context, id uuid.UUID, s
 }
 
 // Advancestatus if current is a way to to update the current status of the session
-// I previously handled this in the doc-service (in-memory) which led to race conditions
+// previously handled this in the doc-service (in-memory) which led to race conditions
 func (r *kycRepository) AdvanceStatusIfCurrent(ctx context.Context, id uuid.UUID, from models.KYCStatus, to models.KYCStatus) (bool, error) {
 
 	result := r.db.WithContext(ctx).

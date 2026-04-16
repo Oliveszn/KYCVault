@@ -275,46 +275,59 @@ func (s *documentService) GetPresignedURL(ctx context.Context, docID uuid.UUID) 
 // advanceSessionIfReady checks whether both document sides are now accepted
 // and, if so, advances the session from doc_upload to face_verify.
 func (s *documentService) advanceSessionIfReady(ctx context.Context, session *models.KYCSession, userID uuid.UUID) error {
-	// First upload initiated  doc_upload regardless of sides being complete.
-	// if session.Status == models.KYCStatusInitiated {
-	// 	return s.kycSvc.AdvanceStatus(ctx, session.ID, models.KYCStatusDocUpload, StatusMeta{})
-	// }
-	updated, err := s.kycRepo.AdvanceStatusIfCurrent(
-		ctx,
-		session.ID,
-		models.KYCStatusInitiated,
-		models.KYCStatusDocUpload,
+	s.logger.Info("advanceSessionIfReady called",
+		zap.String("session_id", session.ID.String()),
+		zap.String("current_status", string(session.Status)),
 	)
+	//ensure we are at least in doc_upload
+	if session.Status == models.KYCStatusInitiated {
+		if err := s.kycSvc.AdvanceStatus(
+			ctx,
+			session.ID,
+			models.KYCStatusDocUpload,
+			StatusMeta{},
+		); err != nil {
+			s.logger.Error("failed to advance to doc_upload",
+				zap.String("session_id", session.ID.String()),
+				zap.Error(err),
+			)
+			return err
+		}
 
+		session.Status = models.KYCStatusDocUpload
+	}
+
+	//check if both sides are done
+	bothDone, err := s.docRepo.BothSidesAccepted(ctx, session.ID)
 	if err != nil {
+		s.logger.Error("both sides check failed",
+			zap.String("session_id", session.ID.String()),
+			zap.Error(err),
+		)
 		return err
 	}
 
-	if !updated {
-		// someone else already updated it → ignore safely
-		return nil
-	}
+	s.logger.Info("both sides check",
+		zap.Bool("both_done", bothDone),
+	)
 
-	// Subsequent uploads: only advance once both sides are accepted.
-	bothDone, err := s.docRepo.BothSidesAccepted(ctx, session.ID)
-	if err != nil {
-		return fmt.Errorf("check both sides: %w", err)
-	}
 	if !bothDone {
-		// return s.kycSvc.AdvanceStatus(ctx, session.ID, models.KYCStatusFaceVerify, StatusMeta{})
 		return nil
 	}
-	//  advance if still DocUpload
-	updated, err = s.kycRepo.AdvanceStatusIfCurrent(
+	//advance to face_verify if still in doc_upload
+	if err := s.kycSvc.AdvanceStatus(
 		ctx,
 		session.ID,
-		models.KYCStatusDocUpload,
 		models.KYCStatusFaceVerify,
-	)
-	if err != nil {
-		return fmt.Errorf("advance DocUpload→FaceVerify: %w", err)
+		StatusMeta{},
+	); err != nil {
+		s.logger.Error("failed to advance to face_verify",
+			zap.String("session_id", session.ID.String()),
+			zap.Error(err),
+		)
+		return err
 	}
-	// if updated == false → another process already advanced it, safe to ignore
+
 	return nil
 }
 

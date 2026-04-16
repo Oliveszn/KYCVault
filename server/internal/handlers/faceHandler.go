@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"kycvault/internal/dtos"
 	"kycvault/internal/middleware"
 	"kycvault/internal/models"
 	"kycvault/internal/services"
@@ -35,8 +36,6 @@ func NewFaceHandler(
 // Fields:
 //
 //	file — the selfie image (JPEG, max 5 MB)
-//
-// Stores the selfie and submits the biometric job to facepp.
 func (h *FaceHandler) StartVerification(c *gin.Context) {
 	sessionID, ok := h.parseUUID(c, "id")
 	if !ok {
@@ -112,6 +111,35 @@ func (h *FaceHandler) GetVerification(c *gin.Context) {
 	respond(c, http.StatusOK, "Face verification retrieved", toFaceResponse(fv))
 }
 
+// POST /admin/kyc/sessions/:id/face/review
+// Body: { "passed": true, "note": "Face matches document." }
+func (h *FaceHandler) ReviewVerification(c *gin.Context) {
+	sessionID, ok := h.parseUUID(c, "id")
+	if !ok {
+		return
+	}
+
+	reviewerID, ok := middleware.GetUserID(c)
+	if !ok {
+		respondError(c, http.StatusUnauthorized, "unauthenticated")
+		return
+	}
+
+	var dto dtos.ReviewFaceRequest
+	if !h.bindJSON(c, &dto) {
+		return
+	}
+
+	if err := h.faceSvc.ReviewVerification(c.Request.Context(), sessionID, reviewerID, dto.Passed, dto.Note); err != nil {
+		handleServiceError(c, h.logger, err, map[error]int{
+			services.ErrFaceVerificationNotFound: http.StatusNotFound,
+		})
+		return
+	}
+
+	respond(c, http.StatusOK, "face verification reviewed", nil)
+}
+
 // HELPERS
 
 func (h *FaceHandler) parseUUID(c *gin.Context, param string) (uuid.UUID, bool) {
@@ -121,6 +149,17 @@ func (h *FaceHandler) parseUUID(c *gin.Context, param string) (uuid.UUID, bool) 
 		return uuid.Nil, false
 	}
 	return id, true
+}
+
+func (h *FaceHandler) bindJSON(c *gin.Context, dto any) bool {
+	if err := c.ShouldBindJSON(dto); err != nil {
+		h.logger.Error("bind error",
+			zap.Error(err),
+		)
+		respondError(c, http.StatusBadRequest, err.Error())
+		return false
+	}
+	return true
 }
 
 //Response shape

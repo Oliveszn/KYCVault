@@ -14,6 +14,11 @@ type InitiateSessionRequest struct {
 	IDType string `json:"id_type" binding:"required,oneof=national_id drivers_license passport residence_permit"`
 }
 
+type ReviewFaceRequest struct {
+	Passed bool   `json:"passed"`
+	Note   string `json:"note"`
+}
+
 type ReviewSessionRequest struct {
 	// Note is an internal-only note visible only to admins in the audit log.
 	Note string `json:"note" binding:"max=1000"`
