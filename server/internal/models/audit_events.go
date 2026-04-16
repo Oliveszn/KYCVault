@@ -66,7 +66,7 @@ type AuditEvent struct {
 	//   session.status_changed → { "from": "doc_upload", "to": "face_verify" }
 	//   face_verify.failed     → { "reason": "liveness_score_low", "score": 0.31 }
 	//   webhook.fired          → { "delivery_id": "...", "endpoint_url": "..." }
-	Metadata []byte `gorm:"column:metadata;type:jsonb" json:"metadata,omitempty"`
+	Metadata map[string]any `gorm:"column:metadata;type:jsonb" json:"metadata,omitempty"`
 
 	// Request context captured for every HTTP-triggered event.
 	IPAddress string `gorm:"column:ip_address" json:"ip_address,omitempty"`

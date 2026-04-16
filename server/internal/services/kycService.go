@@ -127,7 +127,8 @@ func (s *kycService) InitiateSession(ctx context.Context, userID uuid.UUID, dto 
 		SessionID: &session.ID,
 		UserID:    &userID,
 		EventType: models.AuditEventSessionCreated,
-		Metadata:  mustJSON(map[string]any{"country": dto.Country, "id_type": dto.IDType}),
+		// Metadata:  mustJSON(map[string]any{"country": dto.Country, "id_type": dto.IDType}),
+		Metadata: map[string]any{"country": dto.Country, "id_type": dto.IDType},
 	})
 
 	s.logger.Info("kyc session initiated",
@@ -238,12 +239,18 @@ func (s *kycService) AdvanceStatus(ctx context.Context, sessionID uuid.UUID, to 
 		UserID:    &session.UserID,
 		ActorRole: "system",
 		EventType: models.AuditEventStatusChanged,
-		Metadata: mustJSON(map[string]any{
-			"from":              string(session.Status),
-			"to":                string(to),
+		// Metadata: mustJSON(map[string]any{
+		// 	"from":              string(session.Status),
+		// 	"to":                string(to),
+		// 	"vendor_name":       meta.VendorName,
+		// 	"vendor_session_id": meta.VendorSessionID,
+		// }),
+		Metadata: map[string]any{
+			"from":              session.Status,
+			"to":                to,
 			"vendor_name":       meta.VendorName,
 			"vendor_session_id": meta.VendorSessionID,
-		}),
+		},
 	})
 
 	s.logger.Info("kyc session status advanced",
@@ -273,7 +280,8 @@ func (s *kycService) ApproveSession(ctx context.Context, sessionID, reviewerID u
 		ActorRole: "admin",
 		SessionID: &sessionID,
 		EventType: models.AuditEventManualApproval,
-		Metadata:  mustJSON(map[string]any{"review_note": note, "reviewed_at": now}),
+		// Metadata:  mustJSON(map[string]any{"review_note": note, "reviewed_at": now}),
+		Metadata: map[string]any{"review_note": note, "reviewed_at": now},
 	})
 
 	return nil
@@ -296,7 +304,8 @@ func (s *kycService) RejectSession(ctx context.Context, sessionID, reviewerID uu
 		ActorRole: "admin",
 		SessionID: &sessionID,
 		EventType: models.AuditEventManualRejection,
-		Metadata:  mustJSON(map[string]any{"reason": reason, "note": note, "reviewed_at": now}),
+		// Metadata:  mustJSON(map[string]any{"reason": reason, "note": note, "reviewed_at": now}),
+		Metadata: map[string]any{"reason": reason, "note": note, "reviewed_at": now},
 	})
 
 	return nil

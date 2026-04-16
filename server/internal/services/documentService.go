@@ -212,12 +212,18 @@ func (s *documentService) UploadDocument(ctx context.Context, req UploadDocument
 		EventType: models.AuditEventDocumentUploaded,
 		IPAddress: req.IPAddress,
 		UserAgent: req.UserAgent,
-		Metadata: mustJSON(map[string]any{
+		// Metadata: mustJSON(map[string]any{
+		// 	"doc_id":    doc.ID,
+		// 	"side":      string(side),
+		// 	"mime_type": mimeType,
+		// 	"size":      doc.FileSizeBytes,
+		// }),
+		Metadata: map[string]any{
 			"doc_id":    doc.ID,
 			"side":      string(side),
 			"mime_type": mimeType,
 			"size":      doc.FileSizeBytes,
-		}),
+		},
 	})
 
 	// Advance session status if needed
