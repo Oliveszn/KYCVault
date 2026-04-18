@@ -1,7 +1,18 @@
 import { z } from "zod";
 
+export const ID_TYPES = [
+  "national_id",
+  "drivers_license",
+  "passport",
+  "residence_permit",
+] as const;
+export type IDType = (typeof ID_TYPES)[number];
+
 export const initiateSessionSchema = z.object({
-  IDType: z.string().min(1, "Please select a document type"),
+  // IDType: z.string().min(1, "Please select a document type"),
+  IDType: z.enum(ID_TYPES).refine((val) => !!val, {
+    message: "Please select a document type",
+  }),
   country: z.string().min(1, "Please select a country"),
 });
 

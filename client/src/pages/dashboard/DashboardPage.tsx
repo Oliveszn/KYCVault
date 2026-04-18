@@ -1,14 +1,18 @@
-import { LogOut, User, Shield, Activity } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppSelector } from "@/store/hooks";
 import { useLogout } from "@/hooks/useAuth";
 import { selectUser } from "@/store/auth-slice";
-import StatCard from "@/components/dashboard/StatCard";
+import { useSessionHistory } from "@/hooks/useKyc";
+import SessionHistory from "@/components/dashboard/SessionHistory";
+import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 
 export default function DashboardPage() {
   const user = useAppSelector(selectUser);
   const logout = useLogout();
-
+  const { data, isLoading, isError, error } = useSessionHistory();
+  const navigate = useNavigate();
   return (
     <div className="min-h-screen text-black">
       <nav className="border-b border-[#161616] px-6 py-4">
@@ -62,32 +66,36 @@ export default function DashboardPage() {
             ) : null}
             .
           </h1>
-          <p className="text-[#555] text-sm pt-1">
-            You're authenticated. Your session renews automatically.
-          </p>
+          <Button
+            onClick={() => navigate("/kyc/sessions/new")}
+            className="cursor-pointer"
+          >
+            Initiate Session
+          </Button>
         </div>
 
-        <div
-          className="grid grid-cols-1 sm:grid-cols-3 gap-4 animate-in fade-in slide-in-from-bottom-3 duration-500"
-          style={{ animationDelay: "100ms" }}
-        >
-          <StatCard
-            icon={<User size={16} />}
-            label="Role"
-            value={user?.role ?? "—"}
-            highlight={user?.role === "admin"}
-          />
-          <StatCard
-            icon={<Shield size={16} />}
-            label="User ID"
-            value={user?.id ? `#${user.id}` : "—"}
-          />
-          <StatCard
-            icon={<Activity size={16} />}
-            label="Account"
-            value={user?.email ?? "—"}
-            truncate
-          />
+        <div className="animate-in fade-in slide-in-from-bottom-3 duration-500">
+          {/* Loading */}
+          {isLoading && (
+            <div className="text-sm text-[#666]">Loading sessions...</div>
+          )}
+
+          {/* Error */}
+          {isError && (
+            <div className="text-sm text-red-400">Failed to load sessions</div>
+          )}
+
+          {/* Empty state */}
+          {!isLoading && !isError && data?.count === 0 && (
+            <div className="p-6 border border-[#1a1a1a] rounded-xl text-center text-sm text-[#777]">
+              No sessions yet.
+            </div>
+          )}
+
+          {/* Success */}
+          {!isLoading && !isError && data && data?.sessions?.length > 0 && (
+            <SessionHistory sessions={data.sessions} />
+          )}
         </div>
       </main>
     </div>

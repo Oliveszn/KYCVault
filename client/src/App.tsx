@@ -51,7 +51,7 @@ export default function App() {
                 <Route path="/kyc" element={<KycForm />}>
                   <Route
                     index
-                    element={<Navigate to="/sessions/new" replace />}
+                    element={<Navigate to="/kyc/sessions/new" replace />}
                   />
 
                   <Route path="sessions">

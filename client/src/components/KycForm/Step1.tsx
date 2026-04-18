@@ -1,4 +1,4 @@
-import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { useAppDispatch } from "@/store/hooks";
 import {
   Select,
   SelectContent,
@@ -21,12 +21,15 @@ import {
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
+import { useInitiateSession } from "@/hooks/useKyc";
+import { toast } from "sonner";
+import { KYCSessionResponse } from "@/types/kyc";
 
 export default function InitiateSession() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const { data: countries, isLoading, isError } = useCountries();
-
+  const initiateSession = useInitiateSession();
   const {
     control,
     handleSubmit,
@@ -37,8 +40,37 @@ export default function InitiateSession() {
   });
 
   const onSubmit = (values: InitiateSessionValues) => {
-    dispatch(updateFormData(values));
-    navigate("/verify/upload-docs");
+    console.log("Submitting KYC:", values);
+    initiateSession.mutate(
+      {
+        country: values.country,
+        id_type: values.IDType,
+      },
+      {
+        onSuccess: (session: KYCSessionResponse) => {
+          dispatch(updateFormData({ ...values }));
+
+          toast.success("Session started successfully");
+
+          navigate(`/kyc/sessions/${session.id}/documents`);
+        },
+
+        onError: (err: any) => {
+          const status = err?.response?.status;
+
+          if (status === 409) {
+            toast.error("You already have an active session");
+
+            navigate("/dashboard");
+            return;
+          }
+          const message =
+            err?.response?.data?.message || "Failed to initiate session";
+
+          toast.error(message);
+        },
+      },
+    );
   };
 
   return (
@@ -148,7 +180,10 @@ export default function InitiateSession() {
           )}
         </div>
 
-        <FormNavigation onNext={handleSubmit(onSubmit)} />
+        <FormNavigation
+          onNext={handleSubmit(onSubmit)}
+          isSubmitting={initiateSession.isPending}
+        />
       </form>
     </div>
   );

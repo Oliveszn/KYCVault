@@ -9,8 +9,10 @@ import {
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { updateFormData } from "@/store/kyc-slice";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAppDispatch } from "@/store/hooks";
+import { useUploadDocument } from "@/hooks/useDocument";
+import { toast } from "sonner";
 
 type SideFile = {
   file: File;
@@ -31,6 +33,8 @@ export default function UploadDocument() {
 
   const [activeCam, setActiveCam] = useState<"front" | "back" | null>(null);
 
+  const { id: sessionId } = useParams<{ id: string }>();
+  const uploadDocument = useUploadDocument();
   const {
     handleSubmit,
     setValue,
@@ -40,10 +44,43 @@ export default function UploadDocument() {
   });
 
   const onSubmit = (values: UploadDocumentValues) => {
-    dispatch(
-      updateFormData({ documents: { front: values.front, back: values.back } }),
+    if (!sessionId) {
+      toast.error("Session not found");
+      return;
+    }
+
+    // upload front first, then back on success
+    uploadDocument.mutate(
+      { sessionId, file: values.front, side: "front" },
+      {
+        onSuccess: () => {
+          uploadDocument.mutate(
+            { sessionId, file: values.back, side: "back" },
+            {
+              onSuccess: () => {
+                dispatch(
+                  updateFormData({
+                    documents: { front: values.front, back: values.back },
+                  }),
+                );
+                toast.success("Documents uploaded successfully");
+                navigate(`/kyc/sessions/${sessionId}/face`);
+              },
+              onError: (err: any) => {
+                const message =
+                  err?.response?.data?.message || "Failed to upload back side";
+                toast.error(message);
+              },
+            },
+          );
+        },
+        onError: (err: any) => {
+          const message =
+            err?.response?.data?.message || "Failed to upload front side";
+          toast.error(message);
+        },
+      },
     );
-    navigate("/verify/face-verify");
   };
 
   const handleFileChange = (
@@ -245,7 +282,10 @@ export default function UploadDocument() {
           })}
         </div>
 
-        <FormNavigation onNext={handleSubmit(onSubmit)} />
+        <FormNavigation
+          onNext={handleSubmit(onSubmit)}
+          isSubmitting={uploadDocument.isPending}
+        />
       </form>
     </div>
   );

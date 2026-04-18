@@ -12,7 +12,7 @@ type IDType =
   | "residence_permit";
 export interface InitiateSessionPayload {
   country: string;
-  IDType: IDType;
+  id_type: IDType;
 }
 
 export interface ApiResponse<T> {
@@ -30,9 +30,10 @@ export interface KYCSessionResponse {
   userId: string;
   status: KYCStatus;
   country: string;
-  idType: IDType;
-  attemptNumber: number;
-  expiresAt: string;
+  id_type: IDType;
+  attempt_number: number;
+  expires_at: string;
+  created_at: string;
 }
 
 export interface SessionHistoryResponse {

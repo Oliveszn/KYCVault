@@ -8,10 +8,18 @@ import {
 import { zodResolver } from "@hookform/resolvers/zod";
 import { tips } from "@/config/tips";
 import { useAppSelector } from "@/store/hooks";
+import { useNavigate, useParams } from "react-router-dom";
+import { useStartFaceVerification } from "@/hooks/useFaceVerify";
+import type { FaceVerification } from "@/types/faceVerification";
+import { toast } from "sonner";
 
 type Stage = "instructions" | "camera" | "preview" | "processing" | "done";
 
 export default function FaceVerification() {
+  const { id: sessionId } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const startFaceVerification = useStartFaceVerification();
+
   const formData = useAppSelector((state) => state.createKyc.formData);
 
   const [stage, setStage] = useState<Stage>("instructions");
@@ -19,6 +27,7 @@ export default function FaceVerification() {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
   const {
     setValue,
     handleSubmit,
@@ -75,16 +84,24 @@ export default function FaceVerification() {
   };
 
   const onSubmit = (values: FaceVerificationValues) => {
-    const completeData = {
-      ...formData,
-      selfie: values.selfie,
-    };
-    console.log("KYC submission:", completeData);
-    setStage("processing");
-    console.log("selfie file ready:", values.selfie);
-    setTimeout(() => setStage("done"), 3000);
-  };
+    if (!sessionId) return;
 
+    setStage("processing");
+
+    startFaceVerification.mutate(
+      { sessionId, file: values.selfie },
+      {
+        onSuccess: () => {
+          setStage("done");
+        },
+        onError: (err: any) => {
+          const message = err?.response?.data?.message || "Upload failed";
+          toast.error(message);
+          setStage("preview");
+        },
+      },
+    );
+  };
   useEffect(() => {
     return () => stopCamera();
   }, []);
@@ -249,11 +266,19 @@ export default function FaceVerification() {
             <CheckCircle className="w-8 h-8 text-green-600" />
           </div>
           <p className="text-lg font-semibold text-foreground">
-            Verification complete
+            Selfie submitted
           </p>
           <p className="text-sm text-muted-foreground text-center">
-            Your identity has been verified successfully.
+            Your documents are under review. We'll notify you once verification
+            is complete.
           </p>
+          <button
+            type="button"
+            onClick={() => navigate("/dashboard")}
+            className="mt-2 flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            Go to dashboard
+          </button>
         </div>
       )}
     </div>
