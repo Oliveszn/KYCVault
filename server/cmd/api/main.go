@@ -14,6 +14,7 @@ import (
 	"kycvault/internal/router"
 	"kycvault/internal/services"
 	"kycvault/internal/utils"
+	"kycvault/internal/websocket"
 	"net/http"
 	"os"
 	"syscall"
@@ -77,9 +78,14 @@ func main() {
 	isProd := cfg.ENV == "production"
 	cookieCfg := utils.CookieConfig{
 		Domain:   cfg.COOKIE_DOMAIN,
-		Secure:   isProd,               // Enforce HTTPS in production ✓
+		Secure:   isProd,
 		SameSite: http.SameSiteLaxMode, //change to strict mode in prod
 	}
+
+	wsHub := websocket.NewHub()
+	wsHandler := handlers.NewWSHandler(wsHub, zap.L(), cfg.CORSAllowedOrigins)
+
+	notifRepo := repository.NewNotifRepository(database.GetDB())
 
 	authRepo := repository.NewAuthRepository(database.GetDB())
 	authSvc := services.NewAuthService(authRepo, jwtUtil, zap.L())
@@ -89,7 +95,7 @@ func main() {
 	auditRepo := repository.NewAuditRepository(database.GetDB())
 	auditSvc := services.NewAuditService(auditRepo, zap.L())
 	kycRepo := repository.NewKYCRepository(database.GetDB())
-	kycSvc := services.NewKYCService(kycRepo, auditSvc, zap.L())
+	kycSvc := services.NewKYCService(kycRepo, auditSvc, zap.L(), notifRepo, wsHub)
 	kycHandler := handlers.NewKYCHandler(kycSvc, zap.L())
 
 	awsCfg := aws.Config{
@@ -131,7 +137,9 @@ func main() {
 		KycHandler:     kycHandler,
 		DocHandler:     docHandler,
 		FaceHandler:    faceHandler,
+		WSHandler:      wsHandler,
 		AuthMiddleware: authMiddleware,
+		CORSOrigins:    cfg.CORSAllowedOrigins,
 	})
 
 	server := &http.Server{

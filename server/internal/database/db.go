@@ -22,8 +22,7 @@ var AllModels = []interface{}{
 	&models.KYCSession{},
 	&models.KYCDocument{},
 	&models.FaceVerification{},
-	&models.WebhookEndpoint{},
-	&models.WebhookDelivery{},
+	&models.Notification{},
 	&models.AuditEvent{},
 }
 

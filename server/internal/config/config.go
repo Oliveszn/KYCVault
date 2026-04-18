@@ -21,6 +21,7 @@ type Config struct {
 	S3Bucket              string
 	FACE_API_KEY          string
 	FACE_API_SECRET       string
+	CORSAllowedOrigins    string
 }
 
 func LoadConfig() (Config, error) {
@@ -91,6 +92,11 @@ func LoadConfig() (Config, error) {
 		return Config{}, err
 	}
 
+	CORSAllowedOrigins, err := extractEnv("CORS_ALLOWED_ORIGINS")
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		DB_URI:                Db_uri,
 		ServerPort:            port,
@@ -105,6 +111,7 @@ func LoadConfig() (Config, error) {
 		S3Bucket:              s3Bucket,
 		FACE_API_KEY:          faceapikey,
 		FACE_API_SECRET:       faceapisecret,
+		CORSAllowedOrigins:    CORSAllowedOrigins,
 	}, nil
 
 }

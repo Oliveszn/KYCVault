@@ -13,7 +13,9 @@ type RouterDependencies struct {
 	KycHandler     *handlers.KYCHandler
 	DocHandler     *handlers.DocumentHandler
 	FaceHandler    *handlers.FaceHandler
+	WSHandler      *handlers.WSHandler
 	AuthMiddleware gin.HandlerFunc
+	CORSOrigins    string
 }
 
 func NewRouter(deps RouterDependencies) *gin.Engine {
@@ -21,7 +23,7 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 
 	//CORS
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173"},
+		AllowOrigins:     []string{deps.CORSOrigins},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
@@ -40,5 +42,7 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 	docRoutes(api, deps.DocHandler, deps.AuthMiddleware)
 
 	FaceRoutes(api, *deps.FaceHandler, deps.AuthMiddleware)
+
+	r.GET("/ws", deps.AuthMiddleware, deps.WSHandler.Connect)
 	return r
 }

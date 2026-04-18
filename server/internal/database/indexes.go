@@ -59,44 +59,6 @@ func CreateIndexes() error {
 		return fmt.Errorf("failed to create integrity check index: %w", err)
 	}
 
-	//WEBHOOK ENDPOINT
-	// Active endpoints only, for dispatcher lookups.
-	err = DB.Exec(`
-	CREATE INDEX IF NOT EXISTS idx_webhook_endpoints_active ON webhook_endpoints (user_id)
-	WHERE is_active = true AND deleted_at IS NULL;
-	`).Error
-	if err != nil {
-		return fmt.Errorf("failed to create active endpoints only index: %w", err)
-	}
-
-	//WEBHOOK DELIVERIES
-	// Retry worker polls this to find jobs ready to fire.
-	err = DB.Exec(`
-	CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_retry_queue
-	ON webhook_deliveries (next_retry_at ASC)
-	WHERE status = 'pending' AND next_retry_at IS NOT NULL;
-	`).Error
-	if err != nil {
-		return fmt.Errorf("failed to create retry worker index: %w", err)
-	}
-
-	//all deliveries for a session. for admin
-	err = DB.Exec(`
-	CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_session ON webhook_deliveries (session_id, created_at DESC);
-	`).Error
-	if err != nil {
-		return fmt.Errorf("failed to create admin deliveries index: %w", err)
-	}
-
-	// Idempotency dedup check.
-	err = DB.Exec(`
-	CREATE UNIQUE INDEX IF NOT EXISTS idx_webhook_deliveries_idempotency ON webhook_deliveries (idempotency_key)
-	WHERE idempotency_key IS NOT NULL;
-	`).Error
-	if err != nil {
-		return fmt.Errorf("failed to create idempotency check index: %w", err)
-	}
-
 	//AUDIT
 	// Timeline for a specific session (most common admin query).
 	err = DB.Exec(`
