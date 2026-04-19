@@ -9,13 +9,14 @@ import (
 )
 
 type RouterDependencies struct {
-	AuthHandler    *handlers.AuthHandler
-	KycHandler     *handlers.KYCHandler
-	DocHandler     *handlers.DocumentHandler
-	FaceHandler    *handlers.FaceHandler
-	WSHandler      *handlers.WSHandler
-	AuthMiddleware gin.HandlerFunc
-	CORSOrigins    string
+	AuthHandler         *handlers.AuthHandler
+	KycHandler          *handlers.KYCHandler
+	DocHandler          *handlers.DocumentHandler
+	FaceHandler         *handlers.FaceHandler
+	WSHandler           *handlers.WSHandler
+	NotificationHandler *handlers.NotificationHandler
+	AuthMiddleware      gin.HandlerFunc
+	CORSOrigins         string
 }
 
 func NewRouter(deps RouterDependencies) *gin.Engine {
@@ -43,6 +44,9 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 
 	FaceRoutes(api, *deps.FaceHandler, deps.AuthMiddleware)
 
+	NotificationRoutes(api, deps.NotificationHandler, deps.AuthMiddleware)
+
+	//websockets
 	r.GET("/ws", deps.AuthMiddleware, deps.WSHandler.Connect)
 	return r
 }

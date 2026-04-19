@@ -6,7 +6,6 @@ import (
 	"kycvault/internal/dtos"
 	"kycvault/internal/models"
 	"kycvault/internal/repository"
-	"kycvault/internal/websocket"
 	"time"
 
 	"github.com/google/uuid"
@@ -60,26 +59,24 @@ type StatusMeta struct {
 }
 
 type kycService struct {
-	repo      repository.KYCRepository
-	audit     AuditService
-	logger    *zap.Logger
-	notifRepo repository.NotifRepository
-	hub       *websocket.Hub
+	repo     repository.KYCRepository
+	audit    AuditService
+	logger   *zap.Logger
+	notifSvc NotificationService
 }
 
 func NewKYCService(
 	repo repository.KYCRepository,
 	audit AuditService,
 	logger *zap.Logger,
-	notifRepo repository.NotifRepository,
-	hub *websocket.Hub,
+	notifSvc NotificationService,
+
 ) KYCService {
 	return &kycService{
-		repo:      repo,
-		audit:     audit,
-		logger:    logger,
-		notifRepo: notifRepo,
-		hub:       hub,
+		repo:     repo,
+		audit:    audit,
+		logger:   logger,
+		notifSvc: notifSvc,
 	}
 }
 
@@ -288,24 +285,11 @@ func (s *kycService) ApproveSession(ctx context.Context, sessionID, reviewerID u
 		return err
 	}
 
-	err = s.notifRepo.Create(ctx, &models.Notification{
+	s.notifSvc.Create(ctx, &models.Notification{
 		UserID:    session.UserID,
 		SessionID: &session.ID,
 		Type:      "kyc_approved",
 		Message:   "Your identity verification has been approved.",
-	})
-	if err != nil {
-		s.logger.Error("failed to create notification", zap.Error(err))
-	}
-
-	// push to user if they're online
-	s.hub.SendToUser(session.UserID, map[string]any{
-		"type": "notification",
-		"payload": map[string]any{
-			"type":      "kyc_rejected",
-			"message":   "Your identity verification was rejected: ",
-			"sessionID": sessionID,
-		},
 	})
 
 	// Overwrite the audit event with the admin-specific type so it's
@@ -342,24 +326,11 @@ func (s *kycService) RejectSession(ctx context.Context, sessionID, reviewerID uu
 		return err
 	}
 
-	err = s.notifRepo.Create(ctx, &models.Notification{
+	s.notifSvc.Create(ctx, &models.Notification{
 		UserID:    session.UserID,
-		SessionID: &sessionID,
+		SessionID: &session.ID,
 		Type:      "kyc_rejected",
 		Message:   "Your identity verification was rejected: " + reason,
-	})
-
-	if err != nil {
-		s.logger.Error("failed to create notification", zap.Error(err))
-	}
-
-	s.hub.SendToUser(session.UserID, map[string]any{
-		"type": "notification",
-		"payload": map[string]any{
-			"type":      "kyc_rejected",
-			"message":   "Your identity verification was rejected: " + reason,
-			"sessionID": sessionID,
-		},
 	})
 
 	s.audit.Log(ctx, models.AuditEvent{

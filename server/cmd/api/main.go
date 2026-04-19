@@ -87,6 +87,10 @@ func main() {
 
 	notifRepo := repository.NewNotifRepository(database.GetDB())
 
+	notifSvc := services.NewNotificationService(notifRepo, wsHub, zap.L())
+
+	notifHandler := handlers.NewNotificationHandler(notifSvc, zap.L())
+
 	authRepo := repository.NewAuthRepository(database.GetDB())
 	authSvc := services.NewAuthService(authRepo, jwtUtil, zap.L())
 	authHandler := handlers.NewAuthHandler(authSvc, jwtUtil, cookieCfg, zap.L())
@@ -95,7 +99,7 @@ func main() {
 	auditRepo := repository.NewAuditRepository(database.GetDB())
 	auditSvc := services.NewAuditService(auditRepo, zap.L())
 	kycRepo := repository.NewKYCRepository(database.GetDB())
-	kycSvc := services.NewKYCService(kycRepo, auditSvc, zap.L(), notifRepo, wsHub)
+	kycSvc := services.NewKYCService(kycRepo, auditSvc, zap.L(), notifSvc)
 	kycHandler := handlers.NewKYCHandler(kycSvc, zap.L())
 
 	awsCfg := aws.Config{
@@ -133,13 +137,14 @@ func main() {
 
 	// Router
 	r := router.NewRouter(router.RouterDependencies{
-		AuthHandler:    authHandler,
-		KycHandler:     kycHandler,
-		DocHandler:     docHandler,
-		FaceHandler:    faceHandler,
-		WSHandler:      wsHandler,
-		AuthMiddleware: authMiddleware,
-		CORSOrigins:    cfg.CORSAllowedOrigins,
+		AuthHandler:         authHandler,
+		KycHandler:          kycHandler,
+		DocHandler:          docHandler,
+		FaceHandler:         faceHandler,
+		WSHandler:           wsHandler,
+		NotificationHandler: notifHandler,
+		AuthMiddleware:      authMiddleware,
+		CORSOrigins:         cfg.CORSAllowedOrigins,
 	})
 
 	server := &http.Server{
