@@ -115,23 +115,47 @@ func GetUserRole(c *gin.Context) (string, bool) {
 }
 
 // extractBeraretoken  pulls the token from "Bearer token"
+// func extractBearerToken(c *gin.Context) (string, error) {
+// 	header := c.GetHeader("Authorization")
+// 	if header == "" {
+// 		return "", errors.New("authorization header is missing")
+// 	}
+
+// 	parts := strings.SplitN(header, " ", 2)
+// 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+// 		return "", errors.New("authorization header format must be: Bearer <token>")
+// 	}
+
+// 	token := strings.TrimSpace(parts[1])
+// 	if token == "" {
+// 		return "", errors.New("bearer token is empty")
+// 	}
+
+// 	return token, nil
+// }
+
 func extractBearerToken(c *gin.Context) (string, error) {
+	// try Authorization header first, normal HTTP
 	header := c.GetHeader("Authorization")
-	if header == "" {
-		return "", errors.New("authorization header is missing")
+	if header != "" {
+		parts := strings.SplitN(header, " ", 2)
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+			return "", errors.New("authorization header format must be: Bearer <token>")
+		}
+		token := strings.TrimSpace(parts[1])
+		if token == "" {
+			return "", errors.New("bearer token is empty")
+		}
+		return token, nil
 	}
 
-	parts := strings.SplitN(header, " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		return "", errors.New("authorization header format must be: Bearer <token>")
+	// fallback to cookie for WebSocket upgrades
+	token, err := c.Cookie("access_token")
+	if err == nil && strings.TrimSpace(token) != "" {
+		return token, nil
 	}
 
-	token := strings.TrimSpace(parts[1])
-	if token == "" {
-		return "", errors.New("bearer token is empty")
-	}
-
-	return token, nil
+	return "", errors.New("authorization header is missing")
 }
 
 // abortWithError writes a structured error response and halts the middleware chain.
