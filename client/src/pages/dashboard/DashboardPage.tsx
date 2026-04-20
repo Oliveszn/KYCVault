@@ -7,6 +7,7 @@ import { useSessionHistory } from "@/hooks/useKyc";
 import SessionHistory from "@/components/dashboard/SessionHistory";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import NotificationBell from "@/components/dashboard/NotificationBell";
 
 export default function DashboardPage() {
   const user = useAppSelector(selectUser);
@@ -33,6 +34,8 @@ export default function DashboardPage() {
                 Session active
               </span>
             </div>
+
+            <NotificationBell />
 
             <button
               onClick={() => logout.mutate()}
