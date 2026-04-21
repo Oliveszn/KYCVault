@@ -38,8 +38,11 @@ type FaceService interface {
 	StartVerification(ctx context.Context, req StartVerificationRequest) (*models.FaceVerification, error)
 
 	// GetVerification returns the face verification for a session.
-
 	GetVerificationForUser(ctx context.Context, sessionID, userID uuid.UUID) (*models.FaceVerification, error)
+
+	//FOR ADMINS
+	GetVerificationBySessionID(ctx context.Context, sessionID uuid.UUID) (*models.FaceVerification, error)
+	GetSelfieURL(ctx context.Context, verificationID uuid.UUID) (string, error)
 	ReviewVerification(ctx context.Context, verificationID, reviewerID uuid.UUID, passed bool, note string) error
 }
 
@@ -204,6 +207,30 @@ func (s *faceService) GetVerificationForUser(ctx context.Context, sessionID, use
 }
 
 // ADMIN
+func (s *faceService) GetVerificationBySessionID(ctx context.Context, sessionID uuid.UUID) (*models.FaceVerification, error) {
+	fv, err := s.faceRepo.GetBySessionID(ctx, sessionID)
+	if err != nil {
+		if errors.Is(err, repository.ErrFaceVerificationNotFound) {
+			return nil, ErrFaceVerificationNotFound
+		}
+		return nil, ErrInternal
+	}
+	return fv, nil
+}
+
+func (s *faceService) GetSelfieURL(ctx context.Context, verificationID uuid.UUID) (string, error) {
+	fv, err := s.faceRepo.GetByID(ctx, verificationID)
+	if err != nil {
+		return "", ErrFaceVerificationNotFound
+	}
+
+	url, err := s.storage.GetPresignedURL(ctx, fv.SelfieStorageBucket, fv.SelfieStorageKey, 15*time.Minute)
+	if err != nil {
+		return "", ErrInternal
+	}
+	return url, nil
+}
+
 func (s *faceService) ReviewVerification(ctx context.Context, verificationID, reviewerID uuid.UUID, passed bool, note string) error {
 	fv, err := s.faceRepo.GetByID(ctx, verificationID)
 	if err != nil {

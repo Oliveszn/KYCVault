@@ -30,7 +30,7 @@ func NewFaceHandler(
 	}
 }
 
-// StartVerificatio
+// StartVerification
 // POST /kyc/sessions/:id/face
 // Content-Type: multipart/form-data
 // Fields:
@@ -81,7 +81,7 @@ func (h *FaceHandler) StartVerification(c *gin.Context) {
 	respond(c, http.StatusOK, "Face verification completed", toFaceResponse(fv))
 }
 
-// GetVerification godoc
+// GetVerification
 // GET /kyc/sessions/:id/face
 // Returns the current face verification status for a session.
 // The React wizard polls this after submitting the selfie.
@@ -109,6 +109,49 @@ func (h *FaceHandler) GetVerification(c *gin.Context) {
 	}
 
 	respond(c, http.StatusOK, "Face verification retrieved", toFaceResponse(fv))
+}
+
+// GetVerificationAdmin
+// GET /admin/face/:id/face
+// Returns the Face for a selected session for an admin
+func (h *FaceHandler) GetVerificationAdmin(c *gin.Context) {
+	sessionID, ok := h.parseUUID(c, "id")
+	if !ok {
+		return
+	}
+
+	fv, err := h.faceSvc.GetVerificationBySessionID(c.Request.Context(), sessionID)
+	if err != nil {
+		handleServiceError(c, h.logger, err, map[error]int{
+			services.ErrFaceVerificationNotFound: http.StatusNotFound,
+		})
+		return
+	}
+
+	respond(c, http.StatusOK, "face verification retrieved", toFaceResponse(fv))
+}
+
+// GetSelfieUrl
+// GET /admin/face/:id/selfie-url
+// Returns a presigned url for the selfie from s3
+func (h *FaceHandler) GetSelfieURL(c *gin.Context) {
+	verificationID, ok := h.parseUUID(c, "id")
+	if !ok {
+		return
+	}
+
+	url, err := h.faceSvc.GetSelfieURL(c.Request.Context(), verificationID)
+	if err != nil {
+		handleServiceError(c, h.logger, err, map[error]int{
+			services.ErrFaceVerificationNotFound: http.StatusNotFound,
+		})
+		return
+	}
+
+	respond(c, http.StatusOK, "selfie url retrieved", gin.H{
+		"url":        url,
+		"expires_in": "15m",
+	})
 }
 
 // POST /admin/kyc/sessions/:id/face/review
