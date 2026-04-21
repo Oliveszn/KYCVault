@@ -2,6 +2,7 @@ package router
 
 import (
 	"kycvault/internal/handlers"
+	"kycvault/internal/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -15,6 +16,15 @@ func FaceRoutes(r *gin.RouterGroup, h handlers.FaceHandler, auth gin.HandlerFunc
 
 		// GET  /kyc/sessions/:id/face — poll for result (React wizard calls this)
 		face.GET("", h.GetVerification)
+	}
+
+	admin := r.Group("/admin/face")
+	admin.Use(
+		auth,
+		middleware.RequireRole("admin"),
+	)
+	{
+		admin.POST("/:verificationId/review", h.ReviewVerification)
 	}
 
 }

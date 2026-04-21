@@ -47,9 +47,18 @@ func (s *S3Client) Put(ctx context.Context, bucket, key string, body io.Reader, 
 }
 
 func (s *S3Client) GetPresignedURL(ctx context.Context, bucket, key string, ttl time.Duration) (string, error) {
-	// For now, simple public URL (later we can add real presigning)
-	url := fmt.Sprintf("https://%s.s3.amazonaws.com/%s", bucket, key)
-	return url, nil
+	presignClient := s3.NewPresignClient(s.client)
+
+	req, err := presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: &bucket,
+		Key:    &key,
+	}, s3.WithPresignExpires(ttl))
+
+	if err != nil {
+		return "", fmt.Errorf("failed to presign url: %w", err)
+	}
+
+	return req.URL, nil
 }
 
 // Delete implements storage.Client
