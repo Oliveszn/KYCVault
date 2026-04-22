@@ -48,7 +48,7 @@ export default function App() {
               </Route>
 
               {/* Protected routes redirect to /login if not authed */}
-              <Route element={<ProtectedRoute />}>
+              <Route element={<ProtectedRoute allowedRoles={["user"]} />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/kyc" element={<KycForm />}>
                   <Route

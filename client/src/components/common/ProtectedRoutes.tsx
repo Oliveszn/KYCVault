@@ -11,7 +11,7 @@ interface ProtectedRouteProps {
 
 //wraps private routes
 //while silent refresh is firing, render nothing
-//if theres a role mismatch send to unauthorize
+//if theres a role mismatch send to correct page
 //if authenticated and roke is ok render child throught outlets
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   allowedRoles,
@@ -37,7 +37,10 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   }
 
   if (allowedRoles && user && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/unauthorized" replace />;
+    if (user.role === "admin") {
+      return <Navigate to="/admin" replace />;
+    }
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <Outlet />;
@@ -47,6 +50,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 export const PublicOnlyRoute: React.FC = () => {
   const { isBootstrapping } = useAuthContext();
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const user = useAppSelector((s) => s.auth.user);
 
   if (isBootstrapping) {
     return (
@@ -56,8 +60,10 @@ export const PublicOnlyRoute: React.FC = () => {
     );
   }
 
-  if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
+  if (isAuthenticated && user) {
+    return (
+      <Navigate to={user.role === "admin" ? "/admin" : "/dashboard"} replace />
+    );
   }
 
   return <Outlet />;

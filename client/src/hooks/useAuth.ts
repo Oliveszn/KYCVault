@@ -35,7 +35,12 @@ export const useRegister = () => {
       dispatch(setUser(user));
       queryClient.setQueryData(authKeys.me, user);
 
-      navigate("/dashboard");
+      // navigate("/dashboard");
+      if (user.role === "admin") {
+        navigate("/admin");
+      } else {
+        navigate("/dashboard");
+      }
     },
     onError: (err: AxiosError<ApiError>) => {
       const message = err.response?.data?.message;
@@ -68,7 +73,12 @@ export const useLogin = () => {
       dispatch(setUser(user));
       queryClient.setQueryData(authKeys.me, user);
 
-      navigate("/dashboard");
+      // navigate("/dashboard");
+      if (user.role === "admin") {
+        navigate("/admin");
+      } else {
+        navigate("/dashboard");
+      }
     },
     onError: (err: AxiosError<ApiError>) => {
       const message = err.response?.data?.message;
