@@ -22,7 +22,7 @@ export default function NotificationBell() {
     <div className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="relative p-2 rounded-lg hover:bg-muted transition-colors"
+        className="relative p-2 rounded-lg hover:bg-muted transition-colors cursor-pointer"
       >
         <Bell size={18} className="text-muted-foreground" />
         {unread.length > 0 && (
