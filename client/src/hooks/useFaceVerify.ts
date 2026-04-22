@@ -34,50 +34,41 @@ export const useFaceVerification = (sessionId: string) => {
     queryKey: faceKeys.verification(sessionId),
     queryFn: () => faceVerifyApi.getFaceVerification(sessionId),
     enabled: !!sessionId,
+    retry: false,
   });
 };
 
-export const useFaceVerificationPolling = (sessionId: string) => {
+export const useFaceVerificationAdmin = (sessionId: string) => {
   return useQuery({
-    queryKey: faceKeys.verification(sessionId),
-    queryFn: () => faceVerifyApi.getFaceVerification(sessionId),
+    queryKey: ["face", "admin", sessionId],
+    queryFn: () => faceVerifyApi.getFaceVerificationAdmin(sessionId),
     enabled: !!sessionId,
-
-    refetchInterval: (query) => {
-      const data = query.state.data;
-      if (!data) return 2000;
-
-      return data.status === "pending" ? 2000 : false;
-    },
   });
 };
 
-export const useFaceVerificationWithSessionSync = (sessionId: string) => {
+export const useSelfieURL = (verificationId: string) => {
+  return useQuery({
+    queryKey: ["face", "selfie-url", verificationId],
+    queryFn: () => faceVerifyApi.getSelfieURL(verificationId),
+    enabled: !!verificationId,
+  });
+};
+
+export const useReviewFaceVerification = () => {
   const queryClient = useQueryClient();
 
-  return useQuery({
-    queryKey: faceKeys.verification(sessionId),
-    queryFn: () => faceVerifyApi.getFaceVerification(sessionId),
-    enabled: !!sessionId,
+  return useMutation({
+    mutationFn: ({
+      verificationId,
+      payload,
+    }: {
+      verificationId: string;
+      payload: { passed: boolean; note: string };
+    }) => faceVerifyApi.reviewFaceVerification(verificationId, payload),
 
-    refetchInterval: (query) => {
-      const data = query.state.data;
-      if (!data) return 2000;
-
-      const isPending = data.status === "pending";
-
-      if (!isPending) {
-        // 🔥 sync session when done
-        queryClient.invalidateQueries({
-          queryKey: ["kyc", "session", sessionId],
-        });
-
-        queryClient.invalidateQueries({
-          queryKey: ["kyc", "active"],
-        });
-      }
-
-      return isPending ? 2000 : false;
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kyc", "queue"] });
+      queryClient.invalidateQueries({ queryKey: ["kyc", "counts"] });
     },
   });
 };

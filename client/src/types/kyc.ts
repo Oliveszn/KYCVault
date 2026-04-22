@@ -58,3 +58,11 @@ export interface RejectSessionPayload {
   note: string;
   reason: string;
 }
+
+export interface AdminSessionResponse extends KYCSessionResponse {
+  rejection_reason?: string;
+  documents?: {
+    id: string;
+    side: "front" | "back";
+  }[];
+}

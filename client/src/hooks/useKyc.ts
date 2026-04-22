@@ -55,23 +55,6 @@ export const useSessionHistory = () => {
   });
 };
 
-export const useSessionPolling = (sessionId: string) => {
-  return useQuery({
-    queryKey: kycKeys.session(sessionId),
-    queryFn: () => kycApi.getSession(sessionId),
-    enabled: !!sessionId,
-
-    refetchInterval: (query) => {
-      const data = query.state.data;
-      if (!data) return 2000;
-
-      const terminalStates = ["approved", "rejected"];
-
-      return terminalStates.includes(data.status) ? false : 2000;
-    },
-  });
-};
-
 //ADMIN
 export const useSessionQueue = (limit = 20, offset = 0) => {
   return useQuery({

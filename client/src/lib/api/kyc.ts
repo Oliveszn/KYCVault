@@ -1,4 +1,5 @@
 import {
+  AdminSessionResponse,
   ApiResponse,
   ApproveSessionPayload,
   InitiateSessionPayload,
@@ -67,8 +68,8 @@ export const kycApi = {
     return data.payload;
   },
 
-  getSessionAdmin: async (sessionId: string): Promise<KYCSessionResponse> => {
-    const { data } = await apiClient.get<ApiResponse<KYCSessionResponse>>(
+  getSessionAdmin: async (sessionId: string): Promise<AdminSessionResponse> => {
+    const { data } = await apiClient.get<ApiResponse<AdminSessionResponse>>(
       `/admin/kyc/sessions/${sessionId}`,
     );
 

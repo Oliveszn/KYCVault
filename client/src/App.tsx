@@ -15,6 +15,8 @@ import InitiateSession from "./components/KycForm/Step1";
 import UploadDocument from "./components/KycForm/Step2";
 import FaceVerification from "./components/KycForm/Step3";
 import { Toaster } from "./components/ui/sonner";
+import AdminQueuePage from "./pages/admin/AdminQueuePage";
+import AdminSessionPage from "./pages/admin/AdminSessionPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -62,9 +64,13 @@ export default function App() {
                 </Route>
               </Route>
 
-              {/* <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
-                <Route path="/admin" element={<AdminPage />} />
-              </Route> */}
+              <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
+                <Route path="/admin" element={<AdminQueuePage />} />
+                <Route
+                  path="/admin/sessions/:id"
+                  element={<AdminSessionPage />}
+                />
+              </Route>
 
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />

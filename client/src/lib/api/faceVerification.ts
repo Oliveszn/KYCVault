@@ -1,6 +1,7 @@
 import { FaceVerification } from "@/types/faceVerification";
 import { apiClient } from "../../api/client";
 import { ApiResponse } from "@/types/kyc";
+import { PresignedURLResponse } from "@/types/document";
 
 export const faceVerifyApi = {
   startFaceVerification: async (
@@ -29,5 +30,30 @@ export const faceVerifyApi = {
     );
 
     return data.payload;
+  },
+
+  getFaceVerificationAdmin: async (
+    sessionId: string,
+  ): Promise<FaceVerification> => {
+    const { data } = await apiClient.get<ApiResponse<FaceVerification>>(
+      `/admin/face/${sessionId}/face`,
+    );
+    return data.payload;
+  },
+
+  getSelfieURL: async (
+    verificationId: string,
+  ): Promise<PresignedURLResponse> => {
+    const { data } = await apiClient.get<ApiResponse<PresignedURLResponse>>(
+      `/admin/face/${verificationId}/selfie-url`,
+    );
+    return data.payload;
+  },
+
+  reviewFaceVerification: async (
+    verificationId: string,
+    payload: { passed: boolean; note: string },
+  ): Promise<void> => {
+    await apiClient.post(`/admin/face/${verificationId}/review`, payload);
   },
 };
