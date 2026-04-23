@@ -71,9 +71,15 @@ func NewAuthHandler(
 //	}
 func (h *AuthHandler) Register(c *gin.Context) {
 	var dto dtos.RegisterUserDto
-	if !h.bindJSON(c, &dto) {
+	if !bindJSON(c, h.logger, &dto) {
+		h.logger.Warn("invalid register payload", zap.String("ip", c.ClientIP()))
 		return
 	}
+
+	h.logger.Info("register attempt",
+		zap.String("email", dto.Email),
+		zap.String("ip", c.ClientIP()),
+	)
 
 	pair, err := h.authSvc.Register(
 		c.Request.Context(),
@@ -82,12 +88,20 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		c.Request.UserAgent(),
 	)
 	if err != nil {
+		h.logger.Warn("register failed",
+			zap.String("email", dto.Email),
+			zap.Error(err),
+		)
 		handleServiceError(c, h.logger, err, map[error]int{
 			services.ErrUserAlreadyExists: http.StatusConflict,
 			services.ErrPasswordMismatch:  http.StatusBadRequest,
 		})
 		return
 	}
+
+	h.logger.Info("user registered successfully",
+		zap.String("email", dto.Email),
+	)
 
 	//set refresh token cookie
 	utils.SetRefreshTokenCookie(
@@ -118,9 +132,15 @@ func (h *AuthHandler) Register(c *gin.Context) {
 // @Router       /auth/login [post]
 func (h *AuthHandler) Login(c *gin.Context) {
 	var dto dtos.LoginUserDto
-	if !h.bindJSON(c, &dto) {
+	if !bindJSON(c, h.logger, &dto) {
+		h.logger.Warn("invalid login payload", zap.String("ip", c.ClientIP()))
 		return
 	}
+
+	h.logger.Info("login attempt",
+		zap.String("email", dto.Email),
+		zap.String("ip", c.ClientIP()),
+	)
 
 	pair, err := h.authSvc.Login(
 		c.Request.Context(),
@@ -129,11 +149,19 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		c.Request.UserAgent(),
 	)
 	if err != nil {
+		h.logger.Warn("login failed",
+			zap.String("email", dto.Email),
+			zap.Error(err),
+		)
 		handleServiceError(c, h.logger, err, map[error]int{
 			services.ErrInvalidCredentials: http.StatusUnauthorized,
 		})
 		return
 	}
+
+	h.logger.Info("login successful",
+		zap.String("email", dto.Email),
+	)
 
 	// Refresh token goes into a secure httpOnly cookie — never in the body.
 	utils.SetRefreshTokenCookie(c, pair.RawRefreshToken, h.jwtUtil.RefreshTokenTTL(), h.cookieCfg)
@@ -157,9 +185,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	rawToken, err := c.Cookie(utils.RefreshTokenCookieName)
 	if err != nil || rawToken == "" {
+		h.logger.Warn("missing refresh token", zap.String("ip", c.ClientIP()))
 		respondError(c, http.StatusUnauthorized, "refresh token cookie is missing or invalid")
 		return
 	}
+
+	h.logger.Info("refresh attempt", zap.String("ip", c.ClientIP()))
 
 	pair, err := h.authSvc.RefreshTokens(
 		c.Request.Context(),
@@ -170,8 +201,10 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	if err != nil {
 		// On reuse detection, also clear the cookie so the client is fully signed out.
 		if errors.Is(err, services.ErrRefreshTokenReuse) {
+			h.logger.Warn("refresh token reuse detected", zap.String("ip", c.ClientIP()))
 			utils.ClearRefreshTokenCookie(c, h.cookieCfg)
 		}
+		h.logger.Warn("refresh failed", zap.Error(err))
 		handleServiceError(c, h.logger, err, map[error]int{
 			services.ErrRefreshTokenInvalid: http.StatusUnauthorized,
 			services.ErrRefreshTokenExpired: http.StatusUnauthorized,
@@ -179,6 +212,8 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		})
 		return
 	}
+
+	h.logger.Info("tokens refreshed successfully", zap.String("ip", c.ClientIP()))
 
 	utils.SetRefreshTokenCookie(c, pair.RawRefreshToken, h.jwtUtil.RefreshTokenTTL(), h.cookieCfg)
 
@@ -204,7 +239,9 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	if rawToken != "" {
 		if err := h.authSvc.Logout(c.Request.Context(), rawToken); err != nil {
 			h.logger.Error("logout error", zap.String("error", err.Error()))
-			// Still clear the cookie — don't leave the client in a broken state.
+
+		} else {
+			h.logger.Info("user logged out successfully")
 		}
 	}
 
@@ -224,14 +261,19 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 func (h *AuthHandler) LogoutAll(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
+		h.logger.Warn("logout-all unauthorized attempt")
 		respondError(c, http.StatusUnauthorized, "unauthenticated")
 		return
 	}
+	h.logger.Info("logout-all attempt", zap.String("user_id", userID.String()))
 
 	if err := h.authSvc.LogoutAll(c.Request.Context(), userID); err != nil {
+		h.logger.Error("logout-all failed", zap.Error(err))
 		respondError(c, http.StatusInternalServerError, "failed to revoke sessions")
 		return
 	}
+
+	h.logger.Info("all sessions revoked", zap.String("user_id", userID.String()))
 
 	utils.ClearRefreshTokenCookie(c, h.cookieCfg)
 	respond(c, http.StatusOK, "All sessions terminated", nil)
@@ -249,23 +291,19 @@ func (h *AuthHandler) LogoutAll(c *gin.Context) {
 func (h *AuthHandler) Me(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
+		h.logger.Warn("unauthorized /me access attempt")
 		respondError(c, http.StatusUnauthorized, "unauthenticated")
 		return
 	}
 	role, _ := middleware.GetUserRole(c)
 
+	h.logger.Info("me endpoint accessed",
+		zap.String("user_id", userID.String()),
+		zap.String("role", role),
+	)
+
 	respond(c, http.StatusOK, "ok", gin.H{
 		"id":   userID,
 		"role": role,
 	})
-}
-
-// bindJSON attempts to bind and validate the request body. On failure it
-// writes the error response and returns false so the caller can return early.
-func (h *AuthHandler) bindJSON(c *gin.Context, dst interface{}) bool {
-	if err := c.ShouldBindJSON(dst); err != nil {
-		respondError(c, http.StatusBadRequest, err.Error())
-		return false
-	}
-	return true
 }

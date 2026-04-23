@@ -59,12 +59,23 @@ func NewAuthService(
 }
 
 func (s *authService) Register(ctx context.Context, dto dtos.RegisterUserDto, ipAddress, userAgent string) (*TokenPair, error) {
+	s.logger.Info("register service called",
+		zap.String("email", dto.Email),
+		zap.String("ip", ipAddress),
+	)
 	if dto.Password != dto.ConfirmPassword {
+		s.logger.Warn("password mismatch on register",
+			zap.String("email", dto.Email),
+		)
 		return nil, ErrPasswordMismatch
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(dto.Password), bcrypt.DefaultCost)
 	if err != nil {
+		s.logger.Error("failed to hash password",
+			zap.String("email", dto.Email),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("service: hash password: %w", err)
 	}
 
@@ -78,10 +89,14 @@ func (s *authService) Register(ctx context.Context, dto dtos.RegisterUserDto, ip
 
 	if err := s.repo.CreateUser(ctx, user); err != nil {
 		if errors.Is(err, repository.ErrUserAlreadyExists) {
+			s.logger.Warn("user already exists",
+				zap.String("email", dto.Email),
+			)
 			return nil, ErrUserAlreadyExists
 		}
-		s.logger.Warn("Registration attempt with existing email",
+		s.logger.Error("failed to create user",
 			zap.String("email", dto.Email),
+			zap.Error(err),
 		)
 		return nil, ErrInternal
 	}
@@ -91,23 +106,43 @@ func (s *authService) Register(ctx context.Context, dto dtos.RegisterUserDto, ip
 }
 
 func (s *authService) Login(ctx context.Context, dto dtos.LoginUserDto, ipAddress, userAgent string) (*TokenPair, error) {
+	s.logger.Info("login service called",
+		zap.String("email", dto.Email),
+		zap.String("ip", ipAddress),
+	)
+
 	user, err := s.repo.GetUserByEmail(ctx, dto.Email)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
+			s.logger.Warn("login failed - user not found",
+				zap.String("email", dto.Email),
+			)
 			return nil, ErrInvalidCredentials
 		}
-		s.logger.Error("failed to fetch user for login", zap.String("email", dto.Email))
+		s.logger.Error("failed to fetch user",
+			zap.String("email", dto.Email),
+			zap.Error(err),
+		)
 		return nil, ErrInternal
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(dto.Password)); err != nil {
+		s.logger.Warn("login failed - invalid password",
+			zap.String("email", dto.Email),
+		)
 		return nil, ErrInvalidCredentials
 	}
+	s.logger.Info("login successful",
+		zap.String("email", dto.Email),
+	)
 
 	return s.issueTokenPair(ctx, user, ipAddress, userAgent)
 }
 
 func (s *authService) RefreshTokens(ctx context.Context, rawRefreshToken, ipAddress, userAgent string) (*TokenPair, error) {
+	s.logger.Info("refresh token attempt",
+		zap.String("ip", ipAddress),
+	)
 	hash := utils.HashToken(rawRefreshToken)
 
 	token, err := s.repo.GetRefreshTokenByHash(ctx, hash)
@@ -123,8 +158,10 @@ func (s *authService) RefreshTokens(ctx context.Context, rawRefreshToken, ipAddr
 			}
 			return nil, ErrRefreshTokenReuse
 		case errors.Is(err, repository.ErrRefreshTokenExpired):
+			s.logger.Warn("refresh token expired")
 			return nil, ErrRefreshTokenExpired
 		case errors.Is(err, repository.ErrRefreshTokenNotFound):
+			s.logger.Warn("refresh token not found")
 			return nil, ErrRefreshTokenInvalid
 		default:
 			s.logger.Error("refresh token lookup failed", zap.String("error", err.Error()))
@@ -138,6 +175,10 @@ func (s *authService) RefreshTokens(ctx context.Context, rawRefreshToken, ipAddr
 		return nil, ErrInternal
 	}
 
+	s.logger.Info("refresh token rotated",
+		zap.String("user_id", token.UserID.String()),
+	)
+
 	return s.issueTokenPair(ctx, &token.User, ipAddress, userAgent)
 }
 
@@ -146,20 +187,28 @@ func (s *authService) Logout(ctx context.Context, rawRefreshToken string) error 
 
 	token, err := s.repo.GetRefreshTokenByHash(ctx, hash)
 	if err != nil {
-		// Token not found or already revoked treat as a successful logout.
+		s.logger.Info("logout with invalid/expired token (safe ignore)")
 		return nil
 	}
 
 	if err := s.repo.RevokeRefreshToken(ctx, token.ID); err != nil {
-		s.logger.Error("failed to revoke refresh token on logout", zap.String("error", err.Error()))
+		s.logger.Error("failed to revoke refresh token",
+			zap.String("user_id", token.UserID.String()),
+			zap.Error(err),
+		)
 		return ErrInternal
 	}
 
-	s.logger.Info("user logged out", zap.Any("user_id", token.UserID))
+	s.logger.Info("user logged out",
+		zap.String("user_id", token.UserID.String()),
+	)
 	return nil
 }
 
 func (s *authService) LogoutAll(ctx context.Context, userID uuid.UUID) error {
+	s.logger.Info("logout all sessions requested",
+		zap.String("user_id", userID.String()),
+	)
 	if err := s.repo.RevokeAllUserRefreshTokens(ctx, userID); err != nil {
 		s.logger.Error("failed to revoke all user tokens",
 			zap.Any("user_id", userID),
@@ -172,13 +221,25 @@ func (s *authService) LogoutAll(ctx context.Context, userID uuid.UUID) error {
 
 // this generates a fresh access and refresh token and persists the refresh token hash
 func (s *authService) issueTokenPair(ctx context.Context, user *models.User, ipAddress, userAgent string) (*TokenPair, error) {
+	s.logger.Info("issuing token pair",
+		zap.String("user_id", user.ID.String()),
+		zap.String("ip", ipAddress),
+	)
 	accessToken, err := s.jwtUtil.GenerateAccessToken(user.ID, user.Role)
 	if err != nil {
+		s.logger.Error("failed to generate access token",
+			zap.String("user_id", user.ID.String()),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("service: generate access token: %w", err)
 	}
 
 	rawRefresh, refreshHash, err := utils.GenerateRefreshToken()
 	if err != nil {
+		s.logger.Error("failed to generate refresh token",
+			zap.String("user_id", user.ID.String()),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("service: generate refresh token: %w", err)
 	}
 
@@ -192,8 +253,16 @@ func (s *authService) issueTokenPair(ctx context.Context, user *models.User, ipA
 	}
 
 	if err := s.repo.CreateRefreshToken(ctx, rtRecord); err != nil {
+		s.logger.Error("failed to persist refresh token",
+			zap.String("user_id", user.ID.String()),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("service: persist refresh token: %w", err)
 	}
+
+	s.logger.Info("token pair issued successfully",
+		zap.String("user_id", user.ID.String()),
+	)
 
 	return &TokenPair{
 		AccessToken:     accessToken,

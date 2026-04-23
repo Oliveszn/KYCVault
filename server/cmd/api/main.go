@@ -15,6 +15,7 @@ import (
 	"kycvault/internal/services"
 	"kycvault/internal/utils"
 	"kycvault/internal/websocket"
+	"kycvault/internal/worker"
 	"net/http"
 	"os"
 	"syscall"
@@ -59,7 +60,7 @@ func main() {
 	// CREATE INDEXES
 	err = database.CreateIndexes()
 	if err != nil {
-		panic("failed to create indexes")
+		panic(fmt.Errorf("failed to create indexes: %w", err))
 	}
 
 	defer database.CloseDB()
@@ -152,6 +153,16 @@ func main() {
 		Handler: r,
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
+	tokenWorker := worker.NewTokenCleanupWorker(
+		authRepo,
+		zap.L(),
+		15*time.Minute,
+	)
+
+	tokenWorker.Start(ctx)
+
 	go func() {
 		if err := server.ListenAndServe(); err != nil {
 			if err != http.ErrServerClosed {
@@ -167,12 +178,13 @@ func main() {
 	<-quit
 	fmt.Println("Server shutting down...")
 
-	// Create a deadline to wait for
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	cancel()
 
-	// Doesn't block if no connections, but will otherwise wait until the timeout deadline
-	if err := server.Shutdown(ctx); err != nil {
+	// graceful shutdown
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
 		fmt.Printf("Server forced to shutdown: %v\n", err)
 	}
 

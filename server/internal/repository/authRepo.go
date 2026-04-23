@@ -30,7 +30,7 @@ type AuthRepository interface {
 	GetRefreshTokenByHash(ctx context.Context, hash string) (*models.RefreshToken, error)
 	RevokeRefreshToken(ctx context.Context, id uuid.UUID) error
 	RevokeAllUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
-	DeleteExpiredTokens(ctx context.Context) (int64, error)
+	DeleteExpiredTokens(ctx context.Context, limit int) (int64, error)
 }
 
 type authRepository struct {
@@ -138,14 +138,34 @@ func (r *authRepository) RevokeAllUserRefreshTokens(ctx context.Context, userID 
 }
 
 // This deletes tokens past their expiry time that are already revoked
-func (r *authRepository) DeleteExpiredTokens(ctx context.Context) (int64, error) {
-	result := r.db.WithContext(ctx).
-		Where("expires_at < ? AND revoked = true", time.Now().UTC()).
-		Delete(&models.RefreshToken{})
+func (r *authRepository) DeleteExpiredTokens(ctx context.Context, limit int) (int64, error) {
+	var tokens []models.RefreshToken
 
-	if result.Error != nil {
-		return 0, fmt.Errorf("repository: delete expired tokens: %w", result.Error)
+	if err := r.db.WithContext(ctx).
+		Where("expires_at < ?", time.Now().UTC()).
+		Limit(limit).
+		Find(&tokens).Error; err != nil {
+		return 0, err
 	}
-	// Returns the number of rows deleted.
-	return result.RowsAffected, nil
+
+	if len(tokens) == 0 {
+		return 0, nil
+	}
+
+	result := r.db.WithContext(ctx).
+		Delete(&tokens)
+
+	return result.RowsAffected, result.Error
 }
+
+// func (r *authRepository) DeleteExpiredTokens(ctx context.Context) (int64, error) {
+// 	result := r.db.WithContext(ctx).
+// 		Where("expires_at < ?", time.Now().UTC()).
+// 		Delete(&models.RefreshToken{})
+
+// 	if result.Error != nil {
+// 		return 0, fmt.Errorf("repository: delete expired tokens: %w", result.Error)
+// 	}
+// 	// Returns the number of rows deleted.
+// 	return result.RowsAffected, nil
+// }

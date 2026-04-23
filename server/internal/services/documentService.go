@@ -3,7 +3,7 @@ package services
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
+
 	"errors"
 	"fmt"
 	"io"
@@ -93,49 +93,76 @@ func NewDocumentService(
 }
 
 func (s *documentService) UploadDocument(ctx context.Context, req UploadDocumentRequest) (*models.KYCDocument, error) {
-	//  Validate the document side
+	s.logger.Info("upload document started",
+		zap.String("session_id", req.SessionID.String()),
+		zap.String("user_id", req.UserID.String()),
+		zap.String("side_raw", req.Side),
+	)
+
+	// Validate the document side
 	side, err := parseDocumentSide(req.Side)
 	if err != nil {
+		s.logger.Warn("invalid document side",
+			zap.String("side", req.Side),
+			zap.Error(err),
+		)
 		return nil, err
 	}
 
-	// Verify the session exists and belongs to this user
+	// Verify session ownership
 	session, err := s.kycSvc.GetSessionForUser(ctx, req.SessionID, req.UserID)
 	if err != nil {
+		s.logger.Warn("session validation failed",
+			zap.String("session_id", req.SessionID.String()),
+			zap.String("user_id", req.UserID.String()),
+			zap.Error(err),
+		)
 		return nil, err
 	}
 
-	// Enforce that the session is at the right stage
-	// Users may upload at initiated (first upload, which moves session to
-	// doc_upload) or at doc_upload (uploading the second side).
+	// Validate session stage
 	if session.Status != models.KYCStatusInitiated && session.Status != models.KYCStatusDocUpload {
+		s.logger.Warn("invalid session stage for upload",
+			zap.String("session_id", session.ID.String()),
+			zap.String("status", string(session.Status)),
+		)
 		return nil, ErrSessionWrongStage
 	}
 
-	// Validate file type and size
+	// Validate file
 	mimeType, ext, err := validateFile(req.FileHeader)
 	if err != nil {
+		s.logger.Warn("invalid file upload",
+			zap.String("filename", req.FileHeader.Filename),
+			zap.Error(err),
+		)
 		return nil, err
 	}
 
-	// Read file bytes and compute checksum
+	// Read file
 	file, err := req.FileHeader.Open()
 	if err != nil {
+		s.logger.Error("failed to open uploaded file", zap.Error(err))
 		return nil, fmt.Errorf("service: open uploaded file: %w", err)
 	}
 	defer file.Close()
 
 	fileBytes, err := io.ReadAll(io.LimitReader(file, maxFileSizeBytes+1))
 	if err != nil {
+		s.logger.Error("failed to read uploaded file", zap.Error(err))
 		return nil, fmt.Errorf("service: read uploaded file: %w", err)
 	}
+
 	if int64(len(fileBytes)) > maxFileSizeBytes {
+		s.logger.Warn("file too large",
+			zap.Int64("size", int64(len(fileBytes))),
+		)
 		return nil, ErrFileTooLarge
 	}
 
 	checksum := computeChecksum(fileBytes)
 
-	// Build the document record but get ID first for the storage key
+	// Build document
 	docID := uuid.New()
 	storageKey := storage.KeyForDocument(req.SessionID.String(), docID.String(), string(side), ext)
 
@@ -153,14 +180,16 @@ func (s *documentService) UploadDocument(ctx context.Context, req UploadDocument
 		Checksum:         checksum,
 	}
 
-	// Persist the record before uploading
-	// Record-first means if the storage upload fails, we have a row we can
-	// retry or clean up. Storage-first means a successful upload with no DB
-	// record — an orphan we'd never know about.
+	// Save record
 	if err := s.docRepo.CreateDocument(ctx, doc); err != nil {
 		if errors.Is(err, repository.ErrDocumentSideExists) {
-			return nil, repository.ErrDocumentSideExists // side already accepted; surface as not found
+			s.logger.Warn("document side already exists",
+				zap.String("session_id", req.SessionID.String()),
+				zap.String("side", string(side)),
+			)
+			return nil, repository.ErrDocumentSideExists
 		}
+
 		s.logger.Error("failed to create document record",
 			zap.String("session_id", req.SessionID.String()),
 			zap.String("side", string(side)),
@@ -169,7 +198,7 @@ func (s *documentService) UploadDocument(ctx context.Context, req UploadDocument
 		return nil, ErrInternal
 	}
 
-	// Upload to object storage
+	// Upload to storage
 	if err := s.storage.Put(
 		ctx,
 		s.bucket,
@@ -178,10 +207,11 @@ func (s *documentService) UploadDocument(ctx context.Context, req UploadDocument
 		int64(len(fileBytes)),
 		mimeType,
 	); err != nil {
-		// Mark the record as rejected so it doesn't block the session.
+
 		_ = s.docRepo.UpdateDocumentStatus(ctx, doc.ID, models.DocumentStatusRejected, map[string]any{
 			"rejection_reason": "storage upload failed; please re-upload",
 		})
+
 		s.logger.Error("storage upload failed",
 			zap.String("doc_id", doc.ID.String()),
 			zap.String("key", storageKey),
@@ -190,13 +220,9 @@ func (s *documentService) UploadDocument(ctx context.Context, req UploadDocument
 		return nil, ErrInternal
 	}
 
-	//  Accept the document
-	// In a full implementation this is where you'd call your OCR vendor
-	// asynchronously. For now we auto-accept on upload. When you add the
-	// vendor call, move the accept step into a HandleVendorResult method
-	// that gets called from the vendor webhook handler.
+	// Accept document
 	if err := s.docRepo.UpdateDocumentStatus(ctx, doc.ID, models.DocumentStatusAccepted, nil); err != nil {
-		s.logger.Error("failed to accept document after upload",
+		s.logger.Error("failed to mark document as accepted",
 			zap.String("doc_id", doc.ID.String()),
 			zap.Error(err),
 		)
@@ -204,6 +230,7 @@ func (s *documentService) UploadDocument(ctx context.Context, req UploadDocument
 	}
 	doc.Status = models.DocumentStatusAccepted
 
+	// Audit log
 	s.audit.Log(ctx, models.AuditEvent{
 		ActorID:   &req.UserID,
 		ActorRole: "user",
@@ -212,12 +239,6 @@ func (s *documentService) UploadDocument(ctx context.Context, req UploadDocument
 		EventType: models.AuditEventDocumentUploaded,
 		IPAddress: req.IPAddress,
 		UserAgent: req.UserAgent,
-		// Metadata: mustJSON(map[string]any{
-		// 	"doc_id":    doc.ID,
-		// 	"side":      string(side),
-		// 	"mime_type": mimeType,
-		// 	"size":      doc.FileSizeBytes,
-		// }),
 		Metadata: map[string]any{
 			"doc_id":    doc.ID,
 			"side":      string(side),
@@ -226,42 +247,74 @@ func (s *documentService) UploadDocument(ctx context.Context, req UploadDocument
 		},
 	})
 
-	// Advance session status if needed
+	// Advance session
 	if err := s.advanceSessionIfReady(ctx, session, req.UserID); err != nil {
-		// Non-fatal: the document is uploaded and accepted. Log and continue.
-		s.logger.Error("failed to advance session after document upload",
+		s.logger.Error("failed to advance session after upload",
 			zap.String("session_id", req.SessionID.String()),
 			zap.Error(err),
 		)
 	}
 
-	s.logger.Info("document uploaded and accepted",
+	s.logger.Info("document upload completed successfully",
 		zap.String("doc_id", doc.ID.String()),
 		zap.String("session_id", req.SessionID.String()),
+		zap.String("user_id", req.UserID.String()),
 		zap.String("side", string(side)),
 	)
+
 	return doc, nil
 }
 
 func (s *documentService) GetDocumentsForSession(ctx context.Context, sessionID, userID uuid.UUID) ([]models.KYCDocument, error) {
-	// Ownership check through KYCService
+	s.logger.Info("fetching documents for session",
+		zap.String("session_id", sessionID.String()),
+		zap.String("user_id", userID.String()),
+	)
+
 	if _, err := s.kycSvc.GetSessionForUser(ctx, sessionID, userID); err != nil {
+		s.logger.Warn("session ownership validation failed",
+			zap.String("session_id", sessionID.String()),
+			zap.String("user_id", userID.String()),
+			zap.Error(err),
+		)
 		return nil, err
 	}
 
 	docs, err := s.docRepo.GetDocumentsBySession(ctx, sessionID)
 	if err != nil {
+		s.logger.Error("failed to fetch documents",
+			zap.String("session_id", sessionID.String()),
+			zap.Error(err),
+		)
 		return nil, ErrInternal
 	}
+
+	s.logger.Info("documents fetched successfully",
+		zap.String("session_id", sessionID.String()),
+		zap.Int("count", len(docs)),
+	)
+
 	return docs, nil
 }
 
 func (s *documentService) GetPresignedURL(ctx context.Context, docID uuid.UUID) (string, error) {
+	s.logger.Info("generating presigned url",
+		zap.String("doc_id", docID.String()),
+	)
+
 	doc, err := s.docRepo.GetDocumentByID(ctx, docID)
 	if err != nil {
 		if errors.Is(err, repository.ErrDocumentNotFound) {
+			s.logger.Warn("document not found",
+				zap.String("doc_id", docID.String()),
+			)
 			return "", ErrDocumentNotFound
 		}
+
+		s.logger.Error("failed to fetch document",
+			zap.String("doc_id", docID.String()),
+			zap.Error(err),
+		)
 		return "", ErrInternal
 	}
 
@@ -273,6 +326,11 @@ func (s *documentService) GetPresignedURL(ctx context.Context, docID uuid.UUID) 
 		)
 		return "", ErrInternal
 	}
+
+	s.logger.Info("presigned url generated successfully",
+		zap.String("doc_id", docID.String()),
+	)
+
 	return url, nil
 }
 
@@ -372,9 +430,4 @@ func parseDocumentSide(raw string) (models.DocumentSide, error) {
 	default:
 		return "", ErrInvalidDocumentSide
 	}
-}
-
-func computeChecksum(data []byte) string {
-	sum := sha256.Sum256(data)
-	return fmt.Sprintf("%x", sum)
 }

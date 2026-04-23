@@ -51,7 +51,6 @@ type FaceVerification struct {
 	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
 
-	// Relations
 	Session KYCSession `gorm:"foreignKey:SessionID;constraint:OnDelete:CASCADE" json:"-"`
 	User    User       `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"   json:"-"`
 }

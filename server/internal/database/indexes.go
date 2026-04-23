@@ -89,5 +89,12 @@ func CreateIndexes() error {
 	}
 
 	fmt.Println("Indexes created successfully")
+
+	err = DB.Exec(
+		`CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON refresh_tokens (expires_at);
+		`).Error
+	if err != nil {
+		return fmt.Errorf("failed to create token index: %w", err)
+	}
 	return nil
 }

@@ -11,7 +11,6 @@ import (
 	"kycvault/internal/models"
 	"kycvault/internal/repository"
 	"mime/multipart"
-	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -88,33 +87,62 @@ func NewFaceService(
 	}
 }
 func (s *faceService) StartVerification(ctx context.Context, req StartVerificationRequest) (*models.FaceVerification, error) {
+	s.logger.Info("starting face verification",
+		zap.String("session_id", req.SessionID.String()),
+		zap.String("user_id", req.UserID.String()),
+	)
+
 	session, err := s.kycSvc.GetSessionForUser(ctx, req.SessionID, req.UserID)
 	if err != nil {
+		s.logger.Warn("failed to fetch session for face verification",
+			zap.String("session_id", req.SessionID.String()),
+			zap.String("user_id", req.UserID.String()),
+			zap.Error(err),
+		)
 		return nil, err
 	}
 
 	if session.Status != models.KYCStatusFaceVerify {
+		s.logger.Warn("face verification attempted in wrong session stage",
+			zap.String("session_id", req.SessionID.String()),
+			zap.String("current_status", string(session.Status)),
+		)
 		return nil, ErrFaceSessionWrongStage
 	}
 
-	// check if there's already a pending verification
 	existing, err := s.faceRepo.GetBySessionID(ctx, req.SessionID)
 	if err != nil && !errors.Is(err, repository.ErrFaceVerificationNotFound) {
+		s.logger.Error("failed to fetch existing face verification",
+			zap.String("session_id", req.SessionID.String()),
+			zap.Error(err),
+		)
 		return nil, ErrInternal
 	}
+
 	if existing != nil && existing.Status == models.FaceVerificationStatusPending {
+		s.logger.Warn("face verification already pending",
+			zap.String("session_id", req.SessionID.String()),
+		)
 		return nil, ErrFaceVerificationPending
 	}
-	//check for max attempts
+
 	if existing != nil && existing.AttemptCount >= maxFaceAttempts {
+		s.logger.Warn("max face verification attempts reached",
+			zap.String("session_id", req.SessionID.String()),
+			zap.Int("attempts", existing.AttemptCount),
+		)
 		return nil, ErrFaceMaxAttemptsReached
 	}
 
-	//validate and read selfie
 	selfieBytes, err := readSelfie(req.FileHeader)
 	if err != nil {
+		s.logger.Warn("invalid selfie upload",
+			zap.String("session_id", req.SessionID.String()),
+			zap.Error(err),
+		)
 		return nil, err
 	}
+
 	checksum := computeChecksum(selfieBytes)
 
 	verificationID := uuid.New()
@@ -133,7 +161,7 @@ func (s *faceService) StartVerification(ctx context.Context, req StartVerificati
 		ID:                  verificationID,
 		SessionID:           req.SessionID,
 		UserID:              req.UserID,
-		Status:              models.FaceVerificationStatusPending, // stays pending until admin reviews
+		Status:              models.FaceVerificationStatusPending,
 		SelfieStorageKey:    selfieKey,
 		SelfieStorageBucket: s.bucket,
 		SelfieChecksum:      checksum,
@@ -145,21 +173,34 @@ func (s *faceService) StartVerification(ctx context.Context, req StartVerificati
 	if err := s.faceRepo.UpsertVerification(ctx, fv); err != nil {
 		s.logger.Error("failed to upsert face verification record",
 			zap.String("session_id", req.SessionID.String()),
+			zap.String("verification_id", verificationID.String()),
 			zap.Error(err),
 		)
 		return nil, ErrInternal
 	}
 
-	//store the selfie in object storage
-	if err := s.storage.Put(ctx, s.bucket, selfieKey, bytes.NewReader(selfieBytes), int64(len(selfieBytes)), "image/jpeg"); err != nil {
+	if err := s.storage.Put(
+		ctx,
+		s.bucket,
+		selfieKey,
+		bytes.NewReader(selfieBytes),
+		int64(len(selfieBytes)),
+		"image/jpeg",
+	); err != nil {
+		s.logger.Error("failed to upload selfie to storage",
+			zap.String("verification_id", verificationID.String()),
+			zap.String("key", selfieKey),
+			zap.Error(err),
+		)
+
 		_ = s.faceRepo.UpdateResult(ctx, verificationID, map[string]any{
 			"status":         models.FaceVerificationStatusFailed,
 			"failure_reason": "selfie upload failed; please retry",
 		})
+
 		return nil, ErrInternal
 	}
 
-	// advance session to in_review so admin can pick it up
 	if err := s.kycSvc.AdvanceStatus(
 		ctx,
 		req.SessionID,
@@ -186,13 +227,27 @@ func (s *faceService) StartVerification(ctx context.Context, req StartVerificati
 		UserAgent: req.UserAgent,
 	})
 
+	s.logger.Info("face verification submitted successfully",
+		zap.String("verification_id", verificationID.String()),
+		zap.String("session_id", req.SessionID.String()),
+		zap.Int("attempt_count", attemptCount),
+	)
+
 	return fv, nil
 }
 
 func (s *faceService) GetVerificationForUser(ctx context.Context, sessionID, userID uuid.UUID) (*models.FaceVerification, error) {
-	// Ownership check if the session doesn't belong to this user,
-	// GetSessionForUser returns ErrSessionNotFound.
+	s.logger.Info("fetching face verification for user",
+		zap.String("session_id", sessionID.String()),
+		zap.String("user_id", userID.String()),
+	)
+
 	if _, err := s.kycSvc.GetSessionForUser(ctx, sessionID, userID); err != nil {
+		s.logger.Warn("unauthorized access to face verification",
+			zap.String("session_id", sessionID.String()),
+			zap.String("user_id", userID.String()),
+			zap.Error(err),
+		)
 		return nil, err
 	}
 
@@ -201,39 +256,73 @@ func (s *faceService) GetVerificationForUser(ctx context.Context, sessionID, use
 		if errors.Is(err, repository.ErrFaceVerificationNotFound) {
 			return nil, ErrFaceVerificationNotFound
 		}
+		s.logger.Error("failed to fetch face verification",
+			zap.String("session_id", sessionID.String()),
+			zap.Error(err),
+		)
 		return nil, ErrInternal
 	}
+
 	return fv, nil
 }
 
 // ADMIN
 func (s *faceService) GetVerificationBySessionID(ctx context.Context, sessionID uuid.UUID) (*models.FaceVerification, error) {
+	s.logger.Info("admin fetching face verification",
+		zap.String("session_id", sessionID.String()),
+	)
+
 	fv, err := s.faceRepo.GetBySessionID(ctx, sessionID)
 	if err != nil {
 		if errors.Is(err, repository.ErrFaceVerificationNotFound) {
 			return nil, ErrFaceVerificationNotFound
 		}
+		s.logger.Error("failed to fetch face verification (admin)",
+			zap.String("session_id", sessionID.String()),
+			zap.Error(err),
+		)
 		return nil, ErrInternal
 	}
 	return fv, nil
 }
 
 func (s *faceService) GetSelfieURL(ctx context.Context, verificationID uuid.UUID) (string, error) {
+	s.logger.Info("generating selfie presigned url",
+		zap.String("verification_id", verificationID.String()),
+	)
+
 	fv, err := s.faceRepo.GetByID(ctx, verificationID)
 	if err != nil {
+		s.logger.Warn("face verification not found for selfie url",
+			zap.String("verification_id", verificationID.String()),
+		)
 		return "", ErrFaceVerificationNotFound
 	}
 
 	url, err := s.storage.GetPresignedURL(ctx, fv.SelfieStorageBucket, fv.SelfieStorageKey, 15*time.Minute)
 	if err != nil {
+		s.logger.Error("failed to generate presigned url",
+			zap.String("verification_id", verificationID.String()),
+			zap.Error(err),
+		)
 		return "", ErrInternal
 	}
+
 	return url, nil
 }
 
 func (s *faceService) ReviewVerification(ctx context.Context, verificationID, reviewerID uuid.UUID, passed bool, note string) error {
+	s.logger.Info("reviewing face verification",
+		zap.String("verification_id", verificationID.String()),
+		zap.String("reviewer_id", reviewerID.String()),
+		zap.Bool("passed", passed),
+	)
+
 	fv, err := s.faceRepo.GetByID(ctx, verificationID)
 	if err != nil {
+		s.logger.Warn("face verification not found during review",
+			zap.String("verification_id", verificationID.String()),
+		)
 		return ErrFaceVerificationNotFound
 	}
 
@@ -247,15 +336,27 @@ func (s *faceService) ReviewVerification(ctx context.Context, verificationID, re
 		"failure_reason": note,
 		"vendor_name":    "manual",
 	}); err != nil {
+		s.logger.Error("failed to update face verification result",
+			zap.String("verification_id", verificationID.String()),
+			zap.Error(err),
+		)
 		return ErrInternal
 	}
 
 	if passed {
 		if err := s.handlePass(ctx, fv); err != nil {
+			s.logger.Error("failed to handle passed verification",
+				zap.String("verification_id", verificationID.String()),
+				zap.Error(err),
+			)
 			return err
 		}
 	} else {
 		if err := s.handleFail(ctx, fv, note); err != nil {
+			s.logger.Error("failed to handle failed verification",
+				zap.String("verification_id", verificationID.String()),
+				zap.Error(err),
+			)
 			return err
 		}
 	}
@@ -267,6 +368,11 @@ func (s *faceService) ReviewVerification(ctx context.Context, verificationID, re
 		UserID:    &fv.UserID,
 		EventType: models.AuditEventFaceVerifyStarted,
 	})
+
+	s.logger.Info("face verification review completed",
+		zap.String("verification_id", verificationID.String()),
+		zap.Bool("passed", passed),
+	)
 
 	return nil
 }
@@ -338,21 +444,4 @@ func readSelfie(fh *multipart.FileHeader) ([]byte, error) {
 		return nil, ErrFileTooLarge
 	}
 	return data, nil
-}
-
-func (s *faceService) fetchStorageBytes(ctx context.Context, bucket, key string) ([]byte, error) {
-	url, err := s.storage.GetPresignedURL(ctx, bucket, key, 15*time.Minute)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := http.Get(url)
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to fetch file from storage: %s", resp.Status)
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	return io.ReadAll(resp.Body)
 }

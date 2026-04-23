@@ -9,7 +9,6 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -33,23 +32,39 @@ func NewKYCHandler(kycSvc services.KYCService, logger *zap.Logger) *KYCHandler {
 // Creates a new KYC session. Fails if the user already has one active.
 func (h *KYCHandler) InitiateSession(c *gin.Context) {
 	var dto dtos.InitiateSessionRequest
-	if !h.bindJSON(c, &dto) {
+	if !bindJSON(c, h.logger, &dto) {
 		return
 	}
 
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
+		h.logger.Warn("unauthenticated initiate session attempt")
 		respondError(c, http.StatusUnauthorized, "unauthenticated")
 		return
 	}
 
+	h.logger.Info("initiating kyc session",
+		zap.Any("user_id", userID),
+		zap.String("country", dto.Country),
+		zap.String("id_type", dto.IDType),
+	)
+
 	session, err := h.kycSvc.InitiateSession(c.Request.Context(), userID, dto)
 	if err != nil {
+		h.logger.Warn("failed to initiate session",
+			zap.Any("user_id", userID),
+			zap.Error(err),
+		)
 		handleServiceError(c, h.logger, err, map[error]int{
 			services.ErrSessionAlreadyActive: http.StatusConflict,
 		})
 		return
 	}
+
+	h.logger.Info("kyc session created",
+		zap.Any("user_id", userID),
+		zap.Any("session_id", session.ID),
+	)
 
 	respond(c, http.StatusCreated, "kyc session initiated", toSessionResponse(session))
 }
@@ -61,12 +76,21 @@ func (h *KYCHandler) InitiateSession(c *gin.Context) {
 func (h *KYCHandler) GetActiveSession(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
+		h.logger.Warn("unauthenticated get active session attempt")
 		respondError(c, http.StatusUnauthorized, "unauthenticated")
 		return
 	}
 
+	h.logger.Info("fetching active session",
+		zap.Any("user_id", userID),
+	)
+
 	session, err := h.kycSvc.GetActiveSessionForUser(c.Request.Context(), userID)
 	if err != nil {
+		h.logger.Warn("failed to fetch active session",
+			zap.Any("user_id", userID),
+			zap.Error(err),
+		)
 		handleServiceError(c, h.logger, err, map[error]int{
 			services.ErrSessionAlreadyActive: http.StatusConflict,
 		})
@@ -81,19 +105,32 @@ func (h *KYCHandler) GetActiveSession(c *gin.Context) {
 // Returns a specific session. Ownership-checked users can only see their own.
 // The React wizard polls this for status updates.
 func (h *KYCHandler) GetSession(c *gin.Context) {
-	sessionID, ok := h.parseUUID(c, "id")
+	sessionID, ok := parseUUID(c, "id")
 	if !ok {
 		return
 	}
 
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
+		h.logger.Warn("unauthenticated get session attempt",
+			zap.Any("session_id", sessionID),
+		)
 		respondError(c, http.StatusUnauthorized, "unauthenticated")
 		return
 	}
 
+	h.logger.Info("fetching user session",
+		zap.Any("user_id", userID),
+		zap.Any("session_id", sessionID),
+	)
+
 	session, err := h.kycSvc.GetSessionForUser(c.Request.Context(), sessionID, userID)
 	if err != nil {
+		h.logger.Warn("failed to fetch session",
+			zap.Any("user_id", userID),
+			zap.Any("session_id", sessionID),
+			zap.Error(err),
+		)
 		handleServiceError(c, h.logger, err, map[error]int{
 			services.ErrSessionNotFound: http.StatusNotFound,
 		})
@@ -109,12 +146,21 @@ func (h *KYCHandler) GetSession(c *gin.Context) {
 func (h *KYCHandler) GetSessionHistory(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
+		h.logger.Warn("unauthenticated session history attempt")
 		respondError(c, http.StatusUnauthorized, "unauthenticated")
 		return
 	}
 
+	h.logger.Info("fetching session history",
+		zap.Any("user_id", userID),
+	)
+
 	sessions, err := h.kycSvc.GetSessionHistoryForUser(c.Request.Context(), userID)
 	if err != nil {
+		h.logger.Error("failed to fetch session history",
+			zap.Any("user_id", userID),
+			zap.Error(err),
+		)
 		handleServiceError(c, h.logger, err, nil)
 		return
 	}
@@ -138,8 +184,14 @@ func (h *KYCHandler) GetSessionHistory(c *gin.Context) {
 func (h *KYCHandler) GetSessionQueue(c *gin.Context) {
 	limit, offset := h.parsePagination(c)
 
+	h.logger.Info("fetching admin session queue",
+		zap.Int("limit", limit),
+		zap.Int("offset", offset),
+	)
+
 	sessions, total, err := h.kycSvc.GetSessionQueue(c.Request.Context(), limit, offset)
 	if err != nil {
+		h.logger.Error("failed to fetch session queue", zap.Error(err))
 		handleServiceError(c, h.logger, err, nil)
 		return
 	}
@@ -173,7 +225,7 @@ func (h *KYCHandler) GetStatusCounts(c *gin.Context) {
 // GET /admin/kyc/sessions/:id
 // Admin view of a session — no ownership check.
 func (h *KYCHandler) GetSessionAdmin(c *gin.Context) {
-	sessionID, ok := h.parseUUID(c, "id")
+	sessionID, ok := parseUUID(c, "id")
 	if !ok {
 		return
 	}
@@ -193,23 +245,35 @@ func (h *KYCHandler) GetSessionAdmin(c *gin.Context) {
 // POST /admin/kyc/sessions/:id/approve
 // Body: { "note": "All documents verified manually." }
 func (h *KYCHandler) ApproveSession(c *gin.Context) {
-	sessionID, ok := h.parseUUID(c, "id")
+	sessionID, ok := parseUUID(c, "id")
 	if !ok {
 		return
 	}
 
 	var dto dtos.ReviewSessionRequest
-	if !h.bindJSON(c, &dto) {
+	if !bindJSON(c, h.logger, &dto) {
 		return
 	}
 
 	reviewerID, ok := middleware.GetUserID(c)
 	if !ok {
+		h.logger.Warn("unauthenticated approve attempt",
+			zap.Any("session_id", sessionID),
+		)
 		respondError(c, http.StatusUnauthorized, "unauthenticated")
 		return
 	}
 
+	h.logger.Info("approving session",
+		zap.Any("session_id", sessionID),
+		zap.Any("reviewer_id", reviewerID),
+	)
+
 	if err := h.kycSvc.ApproveSession(c.Request.Context(), sessionID, reviewerID, dto.Note); err != nil {
+		h.logger.Warn("failed to approve session",
+			zap.Any("session_id", sessionID),
+			zap.Error(err),
+		)
 		handleServiceError(c, h.logger, err, map[error]int{
 			services.ErrSessionNotFound:         http.StatusNotFound,
 			services.ErrSessionAlreadyTerminal:  http.StatusConflict,
@@ -217,6 +281,10 @@ func (h *KYCHandler) ApproveSession(c *gin.Context) {
 		})
 		return
 	}
+
+	h.logger.Info("session approved",
+		zap.Any("session_id", sessionID),
+	)
 
 	respond(c, http.StatusOK, "session approved", nil)
 }
@@ -225,23 +293,36 @@ func (h *KYCHandler) ApproveSession(c *gin.Context) {
 // POST /admin/kyc/sessions/:id/reject
 // Body: { "note": "Internal note.", "reason": "Document image was blurry." }
 func (h *KYCHandler) RejectSession(c *gin.Context) {
-	sessionID, ok := h.parseUUID(c, "id")
+	sessionID, ok := parseUUID(c, "id")
 	if !ok {
 		return
 	}
 
 	var dto dtos.RejectSessionRequest
-	if !h.bindJSON(c, &dto) {
+	if !bindJSON(c, h.logger, &dto) {
 		return
 	}
 
 	reviewerID, ok := middleware.GetUserID(c)
 	if !ok {
+		h.logger.Warn("unauthenticated reject attempt",
+			zap.Any("session_id", sessionID),
+		)
 		respondError(c, http.StatusUnauthorized, "unauthenticated")
 		return
 	}
 
+	h.logger.Info("rejecting session",
+		zap.Any("session_id", sessionID),
+		zap.Any("reviewer_id", reviewerID),
+		zap.String("reason", dto.Reason),
+	)
+
 	if err := h.kycSvc.RejectSession(c.Request.Context(), sessionID, reviewerID, dto.Note, dto.Reason); err != nil {
+		h.logger.Warn("failed to reject session",
+			zap.Any("session_id", sessionID),
+			zap.Error(err),
+		)
 		handleServiceError(c, h.logger, err, map[error]int{
 			services.ErrSessionNotFound:         http.StatusNotFound,
 			services.ErrSessionAlreadyTerminal:  http.StatusConflict,
@@ -250,31 +331,14 @@ func (h *KYCHandler) RejectSession(c *gin.Context) {
 		return
 	}
 
+	h.logger.Info("session rejected",
+		zap.Any("session_id", sessionID),
+	)
+
 	respond(c, http.StatusOK, "session rejected", nil)
 }
 
 // helpers
-
-func (h *KYCHandler) bindJSON(c *gin.Context, dto any) bool {
-	if err := c.ShouldBindJSON(dto); err != nil {
-		h.logger.Error("bind error",
-			zap.Error(err),
-		)
-		respondError(c, http.StatusBadRequest, err.Error())
-		return false
-	}
-	return true
-}
-
-func (h *KYCHandler) parseUUID(c *gin.Context, param string) (uuid.UUID, bool) {
-	raw := c.Param(param)
-	id, err := uuid.Parse(raw)
-	if err != nil {
-		respondError(c, http.StatusBadRequest, "invalid id format")
-		return uuid.Nil, false
-	}
-	return id, true
-}
 
 func (h *KYCHandler) parsePagination(c *gin.Context) (limit, offset int) {
 	limit = 20

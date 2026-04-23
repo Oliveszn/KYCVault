@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -33,4 +34,26 @@ func handleServiceError(c *gin.Context, logger *zap.Logger, err error, statusMap
 		logger.Error("unhandled service error", zap.Error(err))
 	}
 	respondError(c, http.StatusInternalServerError, "an internal error occurred")
+}
+
+// bindJSON attempts to bind and validate the request body. On failure it
+// writes the error response and returns false so the caller can return early.
+func bindJSON(c *gin.Context, logger *zap.Logger, dto interface{}) bool {
+	if err := c.ShouldBindJSON(dto); err != nil {
+		logger.Error("bind error",
+			zap.Error(err),
+		)
+		respondError(c, http.StatusBadRequest, err.Error())
+		return false
+	}
+	return true
+}
+
+func parseUUID(c *gin.Context, param string) (uuid.UUID, bool) {
+	id, err := uuid.Parse(c.Param(param))
+	if err != nil {
+		respondError(c, http.StatusBadRequest, "invalid id format")
+		return uuid.Nil, false
+	}
+	return id, true
 }

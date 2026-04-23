@@ -38,7 +38,7 @@ type KYCSession struct {
 	IDType  IDType    `gorm:"column:id_type;not null"                         json:"id_type"`
 
 	////Vendor fields populated once the external verification call completes.
-	VendorName      string `gorm:"column:vendor_name"       json:"vendor_name"`             // e.g. "smile_identity", "onfido"
+	VendorName      string `gorm:"column:vendor_name"       json:"vendor_name"`             // "manual"
 	VendorSessionID string `gorm:"column:vendor_session_id;index" json:"vendor_session_id"` // reference ID from vendor
 	VendorRawResult []byte `gorm:"column:vendor_raw_result;type:jsonb" json:"-"`            // full vendor response, stored for audit
 
@@ -47,7 +47,7 @@ type KYCSession struct {
 	ReviewNote string     `gorm:"column:review_note"        json:"review_note,omitempty"`
 	ReviewedAt *time.Time `gorm:"column:reviewed_at"        json:"reviewed_at,omitempty"`
 
-	// Rejection reason by admin human-readable, will also be sent in the webhook payload.
+	// Rejection reason by admin
 	RejectionReason string `gorm:"column:rejection_reason" json:"rejection_reason,omitempty"`
 
 	// Attempt tracking incremented on each re-submission.

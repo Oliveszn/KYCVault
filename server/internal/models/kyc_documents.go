@@ -26,17 +26,17 @@ const (
 type KYCDocument struct {
 	ID        uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
 	SessionID uuid.UUID `gorm:"column:session_id;not null;index"               json:"session_id"`
-	UserID    uuid.UUID `gorm:"column:user_id;not null;index"                  json:"user_id"` // denormalised for query convenience
+	UserID    uuid.UUID `gorm:"column:user_id;not null;index"                  json:"user_id"`
 
 	Side   DocumentSide   `gorm:"column:side;not null"                           json:"side"` // front | back
 	Status DocumentStatus `gorm:"column:status;not null;default:pending"         json:"status"`
 
-	//storagekey is the object key in s3, e.g "kyc/sessions/{session_id}/front.jpg", they shouldnt be exposed in api responses
-	// StorageBucket is recorded so that if you ever migrate buckets, old records still resolve.
+	//storagekey is the object key in s3, they shouldnt be exposed in api responses
+	//StorageBucket is recorded in case we migrate buckets so old records are stored
 	StorageKey    string `gorm:"column:storage_key;not null;unique" json:"-"`
 	StorageBucket string `gorm:"column:storage_bucket;not null"     json:"-"`
 
-	// File metadata — captured at upload time.
+	// File metadata, captured at upload time.
 	OriginalFilename string `gorm:"column:original_filename"          json:"original_filename"`
 	MIMEType         string `gorm:"column:mime_type;not null"         json:"mime_type"` // e.g. "image/jpeg"
 	FileSizeBytes    int64  `gorm:"column:file_size_bytes;not null"   json:"file_size_bytes"`
@@ -51,7 +51,6 @@ type KYCDocument struct {
 	UploadedAt time.Time `gorm:"column:uploaded_at;autoCreateTime" json:"uploaded_at"`
 	UpdatedAt  time.Time `gorm:"column:updated_at;autoUpdateTime"  json:"updated_at"`
 
-	// Relations
 	Session KYCSession `gorm:"foreignKey:SessionID;constraint:OnDelete:CASCADE" json:"-"`
 	User    User       `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"   json:"-"`
 }

@@ -83,11 +83,20 @@ func NewKYCService(
 // InitiateSession creates a new KYC session for a user.
 // It enforces that a user cannot have more than one active session at a time.
 func (s *kycService) InitiateSession(ctx context.Context, userID uuid.UUID, dto dtos.InitiateSessionRequest) (*models.KYCSession, error) {
-	expiresAt := time.Now().UTC().Add(24 * time.Hour) //24 hours rom creation
+	expiresAt := time.Now().UTC().Add(24 * time.Hour)
 
-	//get the session history
+	s.logger.Info("initiating kyc session",
+		zap.String("user_id", userID.String()),
+		zap.String("country", dto.Country),
+		zap.String("id_type", dto.IDType),
+	)
+
 	sessions, err := s.repo.GetSessionsByUserID(ctx, userID)
 	if err != nil {
+		s.logger.Error("failed to fetch user sessions",
+			zap.String("user_id", userID.String()),
+			zap.Error(err),
+		)
 		return nil, ErrInternal
 	}
 
@@ -96,12 +105,14 @@ func (s *kycService) InitiateSession(ctx context.Context, userID uuid.UUID, dto 
 	if len(sessions) > 0 {
 		lastSession := sessions[0]
 
-		// Prevent multiple active sessions
 		if !isTerminalStatus(lastSession.Status) {
+			s.logger.Warn("user already has active session",
+				zap.String("user_id", userID.String()),
+				zap.String("session_id", lastSession.ID.String()),
+			)
 			return nil, ErrSessionAlreadyActive
 		}
 
-		// Increment attempt
 		attempt = lastSession.AttemptNumber + 1
 	}
 
@@ -131,14 +142,14 @@ func (s *kycService) InitiateSession(ctx context.Context, userID uuid.UUID, dto 
 		SessionID: &session.ID,
 		UserID:    &userID,
 		EventType: models.AuditEventSessionCreated,
-		// Metadata:  mustJSON(map[string]any{"country": dto.Country, "id_type": dto.IDType}),
-		Metadata: map[string]any{"country": dto.Country, "id_type": dto.IDType},
+		Metadata:  map[string]any{"country": dto.Country, "id_type": dto.IDType},
 	})
 
-	s.logger.Info("kyc session initiated",
+	s.logger.Info("kyc session created",
 		zap.String("session_id", session.ID.String()),
 		zap.String("user_id", userID.String()),
 	)
+
 	return session, nil
 }
 
@@ -147,8 +158,15 @@ func (s *kycService) GetSession(ctx context.Context, sessionID uuid.UUID) (*mode
 	session, err := s.repo.GetSessionByID(ctx, sessionID)
 	if err != nil {
 		if errors.Is(err, repository.ErrSessionNotFound) {
+			s.logger.Warn("session not found",
+				zap.String("session_id", sessionID.String()),
+			)
 			return nil, ErrSessionNotFound
 		}
+		s.logger.Error("failed to fetch session",
+			zap.String("session_id", sessionID.String()),
+			zap.Error(err),
+		)
 		return nil, ErrInternal
 	}
 	return session, nil
@@ -161,20 +179,36 @@ func (s *kycService) GetSessionForUser(ctx context.Context, sessionID, userID uu
 	if err != nil {
 		return nil, err
 	}
+
 	if session.UserID != userID {
-		// Return NotFound rather than Forbidden don't confirm the session exists.
+		s.logger.Warn("user attempted to access чуж session",
+			zap.String("user_id", userID.String()),
+			zap.String("session_id", sessionID.String()),
+		)
 		return nil, ErrSessionNotFound
 	}
+
 	return session, nil
 }
 
 // GetActiveSessionForUser returns the user's current in-progress session, if any.
 func (s *kycService) GetActiveSessionForUser(ctx context.Context, userID uuid.UUID) (*models.KYCSession, error) {
+	s.logger.Info("fetching active session",
+		zap.String("user_id", userID.String()),
+	)
+
 	session, err := s.repo.GetActiveSessionByUserID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, repository.ErrSessionNotFound) {
+			s.logger.Warn("no active session found",
+				zap.String("user_id", userID.String()),
+			)
 			return nil, ErrSessionNotFound
 		}
+		s.logger.Error("failed to fetch active session",
+			zap.String("user_id", userID.String()),
+			zap.Error(err),
+		)
 		return nil, ErrInternal
 	}
 	return session, nil
@@ -270,11 +304,20 @@ func (s *kycService) AdvanceStatus(ctx context.Context, sessionID uuid.UUID, to 
 func (s *kycService) ApproveSession(ctx context.Context, sessionID, reviewerID uuid.UUID, note string) error {
 	now := time.Now().UTC()
 
+	s.logger.Info("approving session",
+		zap.String("session_id", sessionID.String()),
+		zap.String("reviewer_id", reviewerID.String()),
+	)
+
 	session, err := s.repo.GetSessionByID(ctx, sessionID)
 	if err != nil {
 		if errors.Is(err, repository.ErrSessionNotFound) {
 			return ErrSessionNotFound
 		}
+		s.logger.Error("failed to fetch session for approval",
+			zap.String("session_id", sessionID.String()),
+			zap.Error(err),
+		)
 		return ErrInternal
 	}
 
@@ -292,16 +335,17 @@ func (s *kycService) ApproveSession(ctx context.Context, sessionID, reviewerID u
 		Message:   "Your identity verification has been approved.",
 	})
 
-	// Overwrite the audit event with the admin-specific type so it's
-	// distinguishable from system transitions in the audit log.
 	s.audit.Log(ctx, models.AuditEvent{
 		ActorID:   &reviewerID,
 		ActorRole: "admin",
 		SessionID: &sessionID,
 		EventType: models.AuditEventManualApproval,
-		// Metadata:  mustJSON(map[string]any{"review_note": note, "reviewed_at": now}),
-		Metadata: map[string]any{"review_note": note, "reviewed_at": now},
+		Metadata:  map[string]any{"review_note": note, "reviewed_at": now},
 	})
+
+	s.logger.Info("session approved",
+		zap.String("session_id", sessionID.String()),
+	)
 
 	return nil
 }
@@ -310,11 +354,21 @@ func (s *kycService) ApproveSession(ctx context.Context, sessionID, reviewerID u
 func (s *kycService) RejectSession(ctx context.Context, sessionID, reviewerID uuid.UUID, note, reason string) error {
 	now := time.Now().UTC()
 
+	s.logger.Info("rejecting session",
+		zap.String("session_id", sessionID.String()),
+		zap.String("reviewer_id", reviewerID.String()),
+		zap.String("reason", reason),
+	)
+
 	session, err := s.repo.GetSessionByID(ctx, sessionID)
 	if err != nil {
 		if errors.Is(err, repository.ErrSessionNotFound) {
 			return ErrSessionNotFound
 		}
+		s.logger.Error("failed to fetch session for rejection",
+			zap.String("session_id", sessionID.String()),
+			zap.Error(err),
+		)
 		return ErrInternal
 	}
 
@@ -338,17 +392,26 @@ func (s *kycService) RejectSession(ctx context.Context, sessionID, reviewerID uu
 		ActorRole: "admin",
 		SessionID: &sessionID,
 		EventType: models.AuditEventManualRejection,
-		// Metadata:  mustJSON(map[string]any{"reason": reason, "note": note, "reviewed_at": now}),
-		Metadata: map[string]any{"reason": reason, "note": note, "reviewed_at": now},
+		Metadata:  map[string]any{"reason": reason, "note": note, "reviewed_at": now},
 	})
+
+	s.logger.Info("session rejected",
+		zap.String("session_id", sessionID.String()),
+	)
 
 	return nil
 }
 
 // / GetSessionQueue returns sessions awaiting manual review, oldest first.
 func (s *kycService) GetSessionQueue(ctx context.Context, limit, offset int) ([]models.KYCSession, int64, error) {
+	s.logger.Info("fetching session queue",
+		zap.Int("limit", limit),
+		zap.Int("offset", offset),
+	)
+
 	sessions, total, err := s.repo.GetSessionsByStatus(ctx, models.KYCStatusInReview, limit, offset)
 	if err != nil {
+		s.logger.Error("failed to fetch session queue", zap.Error(err))
 		return nil, 0, ErrInternal
 	}
 	return sessions, total, nil
@@ -356,6 +419,8 @@ func (s *kycService) GetSessionQueue(ctx context.Context, limit, offset int) ([]
 
 // GetStatusCounts returns a count per status for the admin dashboard tiles.
 func (s *kycService) GetStatusCounts(ctx context.Context) (map[models.KYCStatus]int64, error) {
+	s.logger.Info("fetching session status counts")
+
 	statuses := []models.KYCStatus{
 		models.KYCStatusInitiated,
 		models.KYCStatusDocUpload,
@@ -369,10 +434,15 @@ func (s *kycService) GetStatusCounts(ctx context.Context) (map[models.KYCStatus]
 	for _, status := range statuses {
 		count, err := s.repo.CountSessionsByStatus(ctx, status)
 		if err != nil {
+			s.logger.Error("failed to count sessions by status",
+				zap.String("status", string(status)),
+				zap.Error(err),
+			)
 			return nil, ErrInternal
 		}
 		counts[status] = count
 	}
+
 	return counts, nil
 }
 
