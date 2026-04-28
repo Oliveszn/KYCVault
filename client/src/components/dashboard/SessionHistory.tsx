@@ -1,7 +1,9 @@
 import { statusConfig } from "@/config/statusConfig";
+import { cn } from "@/lib/utils";
 import { KYCSessionResponse } from "@/types/kyc";
 import { format } from "date-fns";
 import { Globe, Hash, Calendar, Clock, ChevronRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 type Props = {
   sessions: KYCSessionResponse[];
@@ -24,7 +26,27 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+const getResumeRoute = (session: KYCSessionResponse) => {
+  switch (session.status) {
+    case "initiated":
+      return `/kyc/sessions/${session.id}/documents`;
+    case "doc_upload":
+      return `/kyc/sessions/${session.id}/face`;
+    case "face_verify":
+      return `/kyc/sessions/${session.id}/face`;
+    default:
+      return null; // terminal states — no resume
+  }
+};
+
 export default function SessionHistory({ sessions }: Props) {
+  const navigate = useNavigate();
+
+  const handleClick = (session: KYCSessionResponse) => {
+    const route = getResumeRoute(session);
+    if (route) navigate(route);
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-5">
@@ -46,7 +68,13 @@ export default function SessionHistory({ sessions }: Props) {
         {sessions.map((session, i) => (
           <div
             key={session.id}
-            className="group relative p-4 rounded-xl border border-gray-100 bg-gray-50/60 hover:bg-white hover:border-gray-200 hover:shadow-sm transition-all duration-200 cursor-default"
+            onClick={() => handleClick(session)}
+            className={cn(
+              "group relative p-4 rounded-xl border border-gray-100 bg-gray-50/60 transition-all duration-200",
+              getResumeRoute(session)
+                ? "hover:bg-white hover:border-gray-200 hover:shadow-sm cursor-pointer"
+                : "cursor-default opacity-80",
+            )}
             style={{ animationDelay: `${i * 60}ms` }}
           >
             <div className="flex items-start justify-between gap-4">
@@ -83,19 +111,19 @@ export default function SessionHistory({ sessions }: Props) {
                     </div>
                   )}
                 </div>
-
-                {/* {session.rejection_reason && (
-                  <p className="mt-3 text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
-                    {session.rejection_reason}
-                  </p>
-                )} */}
               </div>
 
               <div className="flex flex-col items-end gap-2 shrink-0">
-                <ChevronRight
-                  size={14}
-                  className="text-gray-200 group-hover:text-gray-400 transition-colors"
-                />
+                {getResumeRoute(session) ? (
+                  <span className="text-[10px] text-blue-500 font-medium group-hover:underline">
+                    Continue →
+                  </span>
+                ) : (
+                  <ChevronRight
+                    size={14}
+                    className="text-gray-200 group-hover:text-gray-400 transition-colors"
+                  />
+                )}
                 <span className="text-[10px] text-gray-300 font-mono">
                   {session.id.slice(0, 8)}
                 </span>

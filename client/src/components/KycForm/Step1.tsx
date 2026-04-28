@@ -40,7 +40,6 @@ export default function InitiateSession() {
   });
 
   const onSubmit = (values: InitiateSessionValues) => {
-    console.log("Submitting KYC:", values);
     initiateSession.mutate(
       {
         country: values.country,

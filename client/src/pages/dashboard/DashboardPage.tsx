@@ -15,7 +15,7 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   return (
     <div
-      className="min-h-screen bg-gray-200 text-black"
+      className="min-h-screen bg-gray-50 text-black"
       style={{ fontFamily: "'DM Sans', sans-serif" }}
     >
       <style>{`

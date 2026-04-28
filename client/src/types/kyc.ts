@@ -34,6 +34,13 @@ export interface KYCSessionResponse {
   attempt_number: number;
   expires_at: string;
   created_at: string;
+  documents?: DocumentSummary[];
+}
+
+export interface DocumentSummary {
+  id: string;
+  side: "front" | "back";
+  // status: "pending" | "accepted" | "rejected";
 }
 
 export interface SessionHistoryResponse {

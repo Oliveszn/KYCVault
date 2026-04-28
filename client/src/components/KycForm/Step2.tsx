@@ -10,9 +10,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { updateFormData } from "@/store/kyc-slice";
 import { useNavigate, useParams } from "react-router-dom";
-import { useAppDispatch } from "@/store/hooks";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { useUploadDocument } from "@/hooks/useDocument";
 import { toast } from "sonner";
+import { idTypes } from "@/config/idtypes";
+import { useSession } from "@/hooks/useKyc";
+import ExistingDocumentPreview from "./ExistingDocumentPreview";
+import { KYCDocument } from "@/types/document";
 
 type SideFile = {
   file: File;
@@ -34,6 +38,12 @@ export default function UploadDocument() {
   const [activeCam, setActiveCam] = useState<"front" | "back" | null>(null);
 
   const { id: sessionId } = useParams<{ id: string }>();
+  const { data: session } = useSession(sessionId!);
+
+  // find existing docs from session
+  const existingFront = session?.documents?.find((d) => d.side === "front");
+  const existingBack = session?.documents?.find((d) => d.side === "back");
+
   const uploadDocument = useUploadDocument();
   const {
     handleSubmit,
@@ -41,46 +51,102 @@ export default function UploadDocument() {
     formState: { errors },
   } = useForm<UploadDocumentValues>({
     resolver: zodResolver(uploadDocumentSchema),
+    // pre-mark as valid if docs already exist so form doesn't block submission
+    defaultValues: {
+      front: existingFront ? (true as any) : undefined,
+      back: existingBack ? (true as any) : undefined,
+    },
   });
 
-  const onSubmit = (values: UploadDocumentValues) => {
-    if (!sessionId) {
-      toast.error("Session not found");
+  const formData = useAppSelector((state) => state.createKyc.formData);
+
+  const country = session?.country || formData.country;
+  const idType = session?.id_type || formData.IDType;
+  const selectedIdType = idTypes.find((t) => t.value === idType);
+
+  // const onSubmit = (values: UploadDocumentValues) => {
+  //   if (!sessionId) {
+  //     toast.error("Session not found");
+  //     return;
+  //   }
+
+  //   // upload front first, then back on success
+  //   uploadDocument.mutate(
+  //     { sessionId, file: values.front, side: "front" },
+  //     {
+  //       onSuccess: () => {
+  //         uploadDocument.mutate(
+  //           { sessionId, file: values.back, side: "back" },
+  //           {
+  //             onSuccess: () => {
+  //               dispatch(
+  //                 updateFormData({
+  //                   documents: { front: values.front, back: values.back },
+  //                 }),
+  //               );
+  //               toast.success("Documents uploaded successfully");
+  //               navigate(`/kyc/sessions/${sessionId}/face`);
+  //             },
+  //             onError: (err: any) => {
+  //               const message =
+  //                 err?.response?.data?.message || "Failed to upload back side";
+  //               toast.error(message);
+  //             },
+  //           },
+  //         );
+  //       },
+  //       onError: (err: any) => {
+  //         const message =
+  //           err?.response?.data?.message || "Failed to upload front side";
+  //         toast.error(message);
+  //       },
+  //     },
+  //   );
+  // };
+  const onSubmit = async (values: UploadDocumentValues) => {
+    if (!sessionId) return;
+
+    const uploads: Promise<KYCDocument>[] = [];
+
+    // only upload sides that were freshly selected
+    if (values.front && !existingFront) {
+      uploads.push(
+        uploadDocument.mutateAsync({
+          sessionId,
+          file: values.front,
+          side: "front",
+        }),
+      );
+    }
+    if (values.back && !existingBack) {
+      uploads.push(
+        uploadDocument.mutateAsync({
+          sessionId,
+          file: values.back,
+          side: "back",
+        }),
+      );
+    }
+
+    // if both already exist and user didn't replace either, just advance
+    if (uploads.length === 0) {
+      navigate(`/kyc/sessions/${sessionId}/face`);
       return;
     }
 
-    // upload front first, then back on success
-    uploadDocument.mutate(
-      { sessionId, file: values.front, side: "front" },
-      {
-        onSuccess: () => {
-          uploadDocument.mutate(
-            { sessionId, file: values.back, side: "back" },
-            {
-              onSuccess: () => {
-                dispatch(
-                  updateFormData({
-                    documents: { front: values.front, back: values.back },
-                  }),
-                );
-                toast.success("Documents uploaded successfully");
-                navigate(`/kyc/sessions/${sessionId}/face`);
-              },
-              onError: (err: any) => {
-                const message =
-                  err?.response?.data?.message || "Failed to upload back side";
-                toast.error(message);
-              },
-            },
-          );
-        },
-        onError: (err: any) => {
-          const message =
-            err?.response?.data?.message || "Failed to upload front side";
-          toast.error(message);
-        },
-      },
-    );
+    try {
+      await Promise.all(uploads);
+      dispatch(
+        updateFormData({
+          documents: { front: values.front, back: values.back },
+        }),
+      );
+      toast.success("Documents uploaded successfully");
+      navigate(`/kyc/sessions/${sessionId}/face`);
+    } catch (err: any) {
+      const message = err?.response?.data?.message || "Upload failed";
+      toast.error(message);
+    }
   };
 
   const handleFileChange = (
@@ -161,12 +227,14 @@ export default function UploadDocument() {
       <div className="bg-muted rounded-lg px-4 py-3 mb-8 flex flex-col gap-1.5">
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Country of document</span>
-          <span className="font-medium text-foreground">Nigeria</span>
+          <span className="font-medium text-foreground">{country || "—"}</span>
         </div>
         <Separator />
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Document type</span>
-          <span className="font-medium text-foreground">National ID Card</span>
+          <span className="font-medium text-foreground">
+            {selectedIdType?.label || idType?.replace(/_/g, " ") || "—"}
+          </span>
         </div>
       </div>
 
@@ -183,6 +251,7 @@ export default function UploadDocument() {
             const inputRef = side === "front" ? frontInputRef : backInputRef;
             const videoRef = side === "front" ? frontVideoRef : backVideoRef;
             const isCamActive = activeCam === side;
+            const existingDoc = side === "front" ? existingFront : existingBack;
 
             return (
               <div key={side}>
@@ -244,6 +313,17 @@ export default function UploadDocument() {
                       <CheckCircle className="w-4 h-4" />
                     </div>
                   </div>
+                ) : existingDoc ? (
+                  <ExistingDocumentPreview
+                    docId={existingDoc.id}
+                    side={side}
+                    onClear={() => {
+                      // let them replace it — opens file picker
+                      if (side === "front") setFrontFile(null);
+                      else setBackFile(null);
+                      inputRef.current?.click();
+                    }}
+                  />
                 ) : (
                   <div className="border border-dashed border-border rounded-lg p-6 flex flex-col items-center gap-4">
                     <div className="size-10 rounded-full bg-muted flex items-center justify-center">

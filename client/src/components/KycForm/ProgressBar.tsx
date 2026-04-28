@@ -1,9 +1,9 @@
 import { useLocation } from "react-router-dom";
 
 const stepMap: Record<string, number> = {
-  "initiate-session": 1,
-  "upload-docs": 2,
-  "face-verify": 3,
+  new: 1,
+  documents: 2,
+  face: 3,
 };
 
 export default function ProgressBar() {
