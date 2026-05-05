@@ -148,8 +148,17 @@ func main() {
 		CORSOrigins:         cfg.CORSAllowedOrigins,
 	})
 
+	// server := &http.Server{
+	// 	Addr:    ":" + cfg.ServerPort,
+	// 	Handler: r,
+	// }
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = cfg.ServerPort // fallback for local dev
+	}
+
 	server := &http.Server{
-		Addr:    ":" + cfg.ServerPort,
+		Addr:    ":" + port,
 		Handler: r,
 	}
 
@@ -171,7 +180,7 @@ func main() {
 		}
 	}()
 
-	fmt.Println("Server started on port " + cfg.ServerPort)
+	fmt.Println("Server started on port " + port)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
