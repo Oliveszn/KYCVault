@@ -148,15 +148,10 @@ func main() {
 		CORSOrigins:         cfg.CORSAllowedOrigins,
 	})
 
-	// server := &http.Server{
-	// 	Addr:    ":" + cfg.ServerPort,
-	// 	Handler: r,
-	// }
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = cfg.ServerPort // fallback for local dev
+		port = cfg.ServerPort // fallback
 	}
-
 	server := &http.Server{
 		Addr:    ":" + port,
 		Handler: r,
